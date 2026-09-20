@@ -10,6 +10,7 @@ export interface RawMaterialItem {
   supplierName?: string;
   dateAdded: string;
   notes?: string;
+  lowStockThreshold?: number;
 }
 
 export interface SupplierTransaction {

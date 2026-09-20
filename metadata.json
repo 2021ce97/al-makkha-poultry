@@ -1,6 +1,6 @@
 {
-  "name": "المکه د چرګانود دانی تولیدي شرکت - Al-Makkah Poultry Feed",
-  "description": "سیستم مدیریت و دیتابیس شرکت تولیدی دانه مرغ المکه (المکه د چرګانود دانی تولیدي شرکت) - Al-Makkah Poultry Feed Manufacturing Co.",
+  "name": "المکه د چرګانود دانی تولیدي شرکت - Al-Makkah Feed Manufacturing",
+  "description": "سیستم جامع مدیریت، فورمولاسیون، فروشات و دیتابیس شرکت تولیدی دانه مرغ المکه (0780 001 923)",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

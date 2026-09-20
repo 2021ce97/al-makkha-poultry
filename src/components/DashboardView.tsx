@@ -46,7 +46,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
     lowStockThreshold, 
     setLowStockThreshold, 
     lowStockMaterials,
-    getLocalizedName 
+    getLocalizedName,
+    isSupabaseConnected 
   } = useDatabase();
 
   const [editingThreshold, setEditingThreshold] = useState(false);
@@ -249,6 +250,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
 
   return (
     <div className="space-y-6">
+      {/* 0. SUPABASE CONNECTION STATUS */}
+      <div className="flex justify-end">
+        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-bold tracking-wider backdrop-blur-md transition-all ${
+          isSupabaseConnected 
+            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-lg shadow-emerald-500/5' 
+            : 'bg-slate-900/50 text-slate-500 border-slate-800'
+        }`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${isSupabaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+          <span>{isSupabaseConnected ? 'SUPABASE: ACTIVE' : 'SUPABASE: DISCONNECTED'}</span>
+        </div>
+      </div>
+
       {/* 1. VISUAL NOTIFICATION SYSTEM BANNER (LOW STOCK HIGHLIGHT) */}
       {lowStockMaterials.length > 0 ? (
         <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-rose-950/70 via-slate-900/90 to-amber-950/60 border border-rose-500/40 shadow-xl shadow-rose-950/20 relative overflow-hidden">

@@ -15,6 +15,7 @@ import {
 } from '../types';
 import { initialFactoryData } from '../initialData';
 import { translations, getLocalizedItemName, getLocalizedCategory } from '../translations';
+import { supabase } from '../lib/supabase.ts';
 
 const STORAGE_KEY = 'mahir_poultry_feed_db_v1';
 const LANG_STORAGE_KEY = 'mahir_poultry_feed_lang';
@@ -37,6 +38,7 @@ interface DatabaseContextType {
   // Localization helpers
   getLocalizedName: (name: string) => string;
   getLocalizedCat: (cat: string) => string;
+  isSupabaseConnected: boolean;
   // Inventory & Suppliers
   addRawMaterial: (
     item: Omit<RawMaterialItem, 'id' | 'dateAdded'>, 
@@ -98,6 +100,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     return null;
   });
+
+  const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
+
+  useEffect(() => {
+    if (supabase) {
+      setIsSupabaseConnected(true);
+    }
+  }, []);
 
   const login = (emailInput: string, passwordInput: string): boolean => {
     const cleanEmail = emailInput.trim().toLowerCase();
@@ -285,6 +295,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           supplierId: assignedSupplierId || existing.supplierId,
           supplierName: item.supplierName || existing.supplierName,
           dateAdded: today,
+          lowStockThreshold: item.lowStockThreshold ?? existing.lowStockThreshold,
         };
       } else {
         const newRawMaterial: RawMaterialItem = {
@@ -748,6 +759,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         lowStockMaterials,
         getLocalizedName,
         getLocalizedCat,
+        isSupabaseConnected,
         addRawMaterial,
         deleteRawMaterial,
         settleSupplierPayment,

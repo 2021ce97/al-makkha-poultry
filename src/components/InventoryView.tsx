@@ -42,6 +42,7 @@ export const InventoryView: React.FC = () => {
   const [supplierPhone, setSupplierPhone] = useState('');
   const [paidAmount, setPaidAmount] = useState<number | ''>('');
   const [notes, setNotes] = useState('');
+  const [threshold, setThreshold] = useState<number | ''>('');
   const [errorMsg, setErrorMsg] = useState('');
 
   // Localized presets for quick-fill
@@ -118,6 +119,7 @@ export const InventoryView: React.FC = () => {
         unitPrice: Number(unitPrice),
         supplierName: supplierName.trim() || undefined,
         notes: notes.trim() || undefined,
+        lowStockThreshold: threshold !== '' ? Number(threshold) : undefined,
       },
       Number(paidAmount) || 0,
       supplierPhone.trim() || undefined
@@ -127,6 +129,7 @@ export const InventoryView: React.FC = () => {
     setItemName('');
     setStockKg('');
     setUnitPrice('');
+    setThreshold('');
     setSupplierName('');
     setSupplierPhone('');
     setPaidAmount('');
@@ -151,7 +154,7 @@ export const InventoryView: React.FC = () => {
 
   const totalWarehouseKg = db.rawMaterials.reduce((acc, i) => acc + i.stockKg, 0);
   const totalWarehouseValue = db.rawMaterials.reduce((acc, i) => acc + (i.stockKg * i.unitPrice), 0);
-  const lowStockCount = db.rawMaterials.filter(i => i.stockKg <= lowStockThreshold).length;
+  const lowStockCount = db.rawMaterials.filter(i => i.stockKg <= (i.lowStockThreshold ?? lowStockThreshold)).length;
 
   const categories = ['all', 'Grains', 'Protein', 'Fuel', 'Fiber', 'Supplements'];
 
@@ -279,7 +282,8 @@ export const InventoryView: React.FC = () => {
       {/* Rectangular Table Cards for each Raw Material */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredItems.map((item) => {
-          const isLowStock = item.stockKg <= lowStockThreshold;
+          const itemThreshold = item.lowStockThreshold ?? lowStockThreshold;
+          const isLowStock = item.stockKg <= itemThreshold;
           const totalVal = item.stockKg * item.unitPrice;
           return (
             <div
@@ -332,6 +336,12 @@ export const InventoryView: React.FC = () => {
                       {totalVal.toLocaleString()} {t.currency}
                     </span>
                   </div>
+                  {item.lowStockThreshold !== undefined && (
+                    <div className="col-span-2 mt-1 flex items-center justify-between text-[10px]">
+                      <span className="text-slate-500">حد هشدار سفارشی:</span>
+                      <span className="text-rose-400 font-mono">{item.lowStockThreshold.toLocaleString()} {t.kilo}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Supplier Info */}
@@ -511,6 +521,26 @@ export const InventoryView: React.FC = () => {
                     placeholder="25"
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-amber-500"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    حد هشدار سفارشی (کیلو) - اختیاری
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={threshold}
+                    onChange={(e) => setThreshold(e.target.value ? Number(e.target.value) : '')}
+                    placeholder={`پیش‌فرض: ${lowStockThreshold}`}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-amber-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    موجودی کمتر از این مقدار باعث نمایش وضعیت "کمبود" می‌شود.
+                  </p>
                 </div>
               </div>
 
