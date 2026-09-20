@@ -1,0 +1,180 @@
+import React, { useState } from 'react';
+import { useDatabase } from '../context/DatabaseContext';
+import { 
+  Lock, 
+  Mail, 
+  ArrowRight, 
+  ArrowLeft,
+  ShieldCheck, 
+  Wheat, 
+  AlertCircle,
+  Globe2
+} from 'lucide-react';
+import { Language } from '../types';
+
+export const LoginPage: React.FC = () => {
+  const { lang, setLang, t, login } = useDatabase();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!email || !password) {
+      setError(t.invalidCredentials);
+      return;
+    }
+
+    const success = login(email, password);
+    if (!success) {
+      setError(t.invalidCredentials);
+    }
+  };
+
+  const isRtl = lang === 'fa' || lang === 'ps';
+  const ArrowIcon = isRtl ? ArrowLeft : ArrowRight;
+
+  return (
+    <div 
+      className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col justify-between relative overflow-hidden"
+      dir={isRtl ? 'rtl' : 'ltr'}
+    >
+      {/* Ambient background glows */}
+      <div className="absolute -top-40 -left-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/3 -right-40 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-40 left-1/3 w-96 h-96 bg-amber-600/10 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Top Bar with Language Selector */}
+      <header className="relative z-10 max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20 text-slate-950 font-bold">
+            <Wheat className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="font-bold text-base sm:text-lg tracking-tight text-white block">
+              {t.companyName}
+            </span>
+            <span className="text-xs text-amber-400 font-medium">
+              {t.activeFactory} • ERP System
+            </span>
+          </div>
+        </div>
+
+        {/* Language switcher */}
+        <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-800 p-1 rounded-xl shadow-sm backdrop-blur-md">
+          <Globe2 className="w-4 h-4 text-slate-400 mx-1.5" />
+          {(['fa', 'ps', 'en'] as Language[]).map((l) => (
+            <button
+              key={l}
+              type="button"
+              onClick={() => setLang(l)}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+                lang === l
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              {l === 'fa' ? 'دری' : l === 'ps' ? 'پښتو' : 'EN'}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {/* Main Login Card */}
+      <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-8 sm:py-12">
+        <div className="w-full max-w-md">
+          <div className="bg-slate-900/95 border border-slate-800/90 rounded-2xl p-6 sm:p-8 shadow-2xl shadow-black/60 backdrop-blur-xl relative">
+            {/* Top decorative accent bar */}
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-500 rounded-t-2xl" />
+
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 mb-3 shadow-inner">
+                <ShieldCheck className="w-7 h-7" />
+              </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                {t.loginTitle}
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1.5 leading-relaxed">
+                {t.loginSubtitle}
+              </p>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="mb-5 p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  {t.emailLabel}
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 start-0 flex items-center ps-3.5 pointer-events-none text-slate-400">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Rayan@poletry.af"
+                    className="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl py-2.5 ps-10 pe-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    {t.passwordLabel}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-[11px] text-slate-400 hover:text-amber-400 transition-colors"
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 start-0 flex items-center ps-3.5 pointer-events-none text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl py-2.5 ps-10 pe-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+              >
+                <span>{t.loginBtn}</span>
+                <ArrowIcon className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="relative z-10 py-4 text-center text-xs text-slate-500 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-center gap-2">
+        <span>{t.companyName} • {t.securityVerified}</span>
+        <span className="hidden sm:inline">•</span>
+        <span className="text-slate-400 font-mono" dir="ltr">📞 0780 001 923</span>
+      </footer>
+    </div>
+  );
+};
