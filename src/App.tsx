@@ -78,7 +78,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div 
-      className="min-h-screen bg-slate-950 text-slate-100 flex flex-row font-sans selection:bg-amber-500 selection:text-slate-950"
+      className="min-h-screen bg-slate-100 text-slate-900 flex flex-row font-sans selection:bg-amber-500 selection:text-white"
       dir={isRtl ? 'rtl' : 'ltr'}
     >
       {/* Sidebar Navigation */}

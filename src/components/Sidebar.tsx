@@ -11,7 +11,6 @@ import {
   BarChart3, 
   LogOut, 
   Wheat, 
-  AlertTriangle,
   ChevronLeft,
   ChevronRight,
   Globe2,
@@ -56,14 +55,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: t.navDashboard,
       icon: LayoutDashboard,
       badge: lowStockMaterials.length > 0 ? lowStockMaterials.length : undefined,
-      badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+      badgeColor: 'bg-rose-100 text-rose-700 border-rose-200',
     },
     {
       id: 'inventory' as ActiveTab,
       label: t.navInventory,
       icon: Warehouse,
       badge: lowStockMaterials.length > 0 ? lowStockMaterials.length : undefined,
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
     },
     {
       id: 'formula' as ActiveTab,
@@ -107,21 +106,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
     : (isCollapsed ? ChevronRight : ChevronLeft);
 
   const sidebarContent = (
-    <div className="h-full flex flex-col justify-between bg-slate-900 border-slate-800 text-slate-200">
+    <div className="h-full flex flex-col justify-between bg-white border-r border-slate-200 text-slate-800 shadow-sm">
       {/* Top Brand */}
       <div>
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center text-slate-950 font-bold shrink-0 shadow-md shadow-amber-500/20">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-500 flex items-center justify-center text-white font-bold shrink-0 shadow-md shadow-amber-500/25">
               <Wheat className="w-6 h-6" />
             </div>
             {!isCollapsed && (
               <div className="truncate">
-                <h2 className="font-bold text-sm tracking-tight text-white truncate">
+                <h2 className="font-bold text-sm tracking-tight text-slate-900 truncate">
                   {t.companyName}
                 </h2>
-                <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   <span>{t.systemOnline}</span>
                 </div>
               </div>
@@ -132,7 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={() => setIsMobileOpen(false)}
-            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+            className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100"
           >
             <X className="w-5 h-5" />
           </button>
@@ -151,19 +150,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 title={isCollapsed ? item.label : undefined}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
                   isActive
-                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/15 font-semibold'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
+                    ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20 font-semibold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 } ${isCollapsed ? 'justify-center' : 'justify-between'}`}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-slate-950' : 'text-slate-400 group-hover:text-amber-400'}`} />
+                  <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-amber-600'}`} />
                   {!isCollapsed && (
                     <span className="truncate">{item.label}</span>
                   )}
                 </div>
 
                 {!isCollapsed && item.badge !== undefined && (
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${item.badgeColor}`}>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${isActive ? 'bg-white/20 text-white border-white/30' : item.badgeColor}`}>
                     {item.badge}
                   </span>
                 )}
@@ -174,11 +173,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Bottom Footer Section */}
-      <div className="p-3 border-t border-slate-800 space-y-3 bg-slate-900/80">
+      <div className="p-3 border-t border-slate-200 space-y-3 bg-slate-50/60">
         {/* Language selector */}
-        <div className={`flex items-center gap-1 bg-slate-950/80 border border-slate-800 p-1 rounded-xl ${isCollapsed ? 'flex-col' : 'justify-between'}`}>
+        <div className={`flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-xl shadow-xs ${isCollapsed ? 'flex-col' : 'justify-between'}`}>
           {!isCollapsed && (
-            <div className="flex items-center gap-1.5 ps-1.5 text-xs text-slate-400">
+            <div className="flex items-center gap-1.5 ps-1.5 text-xs text-slate-500 font-medium">
               <Globe2 className="w-3.5 h-3.5" />
               <span>{t.dir === 'rtl' ? 'زبان:' : 'Lang:'}</span>
             </div>
@@ -191,8 +190,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => setLang(l)}
                 className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
                   lang === l
-                    ? 'bg-amber-500 text-slate-950'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 {l === 'fa' ? 'دری' : l === 'ps' ? 'پښتو' : 'EN'}
@@ -203,15 +202,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* User Card */}
         {user && (
-          <div className={`p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center gap-3 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+          <div className={`p-2.5 rounded-xl bg-white border border-slate-200 shadow-xs flex items-center gap-3 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center font-bold text-xs shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center font-bold text-xs shrink-0">
                 <ShieldCheck className="w-4 h-4" />
               </div>
               {!isCollapsed && (
                 <div className="truncate text-xs">
-                  <span className="font-bold text-white block truncate">{user.name}</span>
-                  <span className="text-[10px] text-slate-400 block truncate">{user.email}</span>
+                  <span className="font-bold text-slate-900 block truncate">{user.name}</span>
+                  <span className="text-[10px] text-slate-500 block truncate">{user.email}</span>
                 </div>
               )}
             </div>
@@ -221,7 +220,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 type="button"
                 onClick={logout}
                 title={t.logoutBtn}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -234,7 +233,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="w-full py-1.5 px-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center gap-2 transition-colors"
+            className="w-full py-1.5 px-2 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 flex items-center justify-center gap-2 transition-colors"
           >
             <CollapseIcon className="w-4 h-4" />
             {!isCollapsed && (
@@ -250,7 +249,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Desktop Sidebar */}
       <aside 
-        className={`hidden lg:block shrink-0 transition-all duration-300 z-30 h-screen sticky top-0 border-e border-slate-800 ${
+        className={`hidden lg:block shrink-0 transition-all duration-300 z-30 h-screen sticky top-0 border-r border-slate-200 ${
           isCollapsed ? 'w-20' : 'w-64'
         }`}
       >
@@ -261,7 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isMobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden flex">
           <div 
-            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
             onClick={() => setIsMobileOpen(false)}
           />
           <div 

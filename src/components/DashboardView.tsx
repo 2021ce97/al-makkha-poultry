@@ -9,19 +9,16 @@ import {
   Wallet, 
   Receipt, 
   CalendarClock, 
-  ArrowUpRight, 
   AlertTriangle,
   CheckCircle2,
   SlidersHorizontal,
-  ChevronRight,
-  ChevronLeft,
   ArrowRight,
   ArrowLeft
 } from 'lucide-react';
 import {
   ResponsiveContainer,
-  BarChart,
-  Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   Tooltip,
@@ -29,9 +26,7 @@ import {
   PieChart,
   Pie,
   Cell,
-  CartesianGrid,
-  AreaChart,
-  Area
+  CartesianGrid
 } from 'recharts';
 
 interface DashboardViewProps {
@@ -116,7 +111,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
   });
 
   // Inventory breakdown for pie chart
-  const COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
+  const COLORS = ['#d97706', '#059669', '#2563eb', '#dc2626', '#7c3aed', '#0891b2', '#db2777'];
   const inventoryPieData = db.rawMaterials.map(rm => ({
     name: getLocalizedName(rm.name).split('(')[0].trim(),
     value: rm.stockKg,
@@ -131,7 +126,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
     }
   };
 
-  // Rectangular clickable cards configuration
+  // Rectangular clickable cards configuration (Light Theme)
   const rectangularCards = [
     {
       id: 'raw-stock',
@@ -139,11 +134,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
       value: `${totalRawStockKg.toLocaleString()} ${t.kilo}`,
       subvalue: `${(totalRawStockKg / 1000).toFixed(1)} ${t.ton} (${totalRawStockValue.toLocaleString()} ${t.currency})`,
       icon: Wheat,
-      bg: 'bg-slate-900/90 hover:bg-slate-850',
-      border: 'border-amber-500/30 hover:border-amber-500/60',
-      textColor: 'text-amber-400',
-      accentColor: 'text-amber-300',
-      iconBg: 'bg-amber-500/15 text-amber-400',
+      bg: 'bg-white hover:bg-amber-50/40',
+      border: 'border-slate-200 hover:border-amber-400',
+      textColor: 'text-amber-700',
+      iconBg: 'bg-amber-100 text-amber-700',
       tab: 'inventory',
       badge: `${db.rawMaterials.length} ${t.itemsCount}`,
       hasAlert: lowStockMaterials.length > 0,
@@ -154,11 +148,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
       value: `${totalProcessedKg.toLocaleString()} ${t.kilo}`,
       subvalue: `${totalProcessedBags.toLocaleString()} ${t.bag} (${(totalProcessedKg / 1000).toFixed(1)} ${t.ton})`,
       icon: PackageCheck,
-      bg: 'bg-slate-900/90 hover:bg-slate-850',
-      border: 'border-emerald-500/30 hover:border-emerald-500/60',
-      textColor: 'text-emerald-400',
-      accentColor: 'text-emerald-300',
-      iconBg: 'bg-emerald-500/15 text-emerald-400',
+      bg: 'bg-white hover:bg-emerald-50/40',
+      border: 'border-slate-200 hover:border-emerald-400',
+      textColor: 'text-emerald-700',
+      iconBg: 'bg-emerald-100 text-emerald-700',
       tab: 'formula',
       badge: `${db.processedStock.length} ${t.records}`,
     },
@@ -168,11 +161,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
       value: `${totalOwedToSuppliers.toLocaleString()} ${t.currency}`,
       subvalue: `${db.suppliers.filter(s => s.balanceOwed > 0).length} ${t.navSuppliers}`,
       icon: Truck,
-      bg: 'bg-slate-900/90 hover:bg-slate-850',
-      border: 'border-rose-500/30 hover:border-rose-500/60',
-      textColor: 'text-rose-400',
-      accentColor: 'text-rose-300',
-      iconBg: 'bg-rose-500/15 text-rose-400',
+      bg: 'bg-white hover:bg-rose-50/40',
+      border: 'border-slate-200 hover:border-rose-400',
+      textColor: 'text-rose-700',
+      iconBg: 'bg-rose-100 text-rose-700',
       tab: 'suppliers',
       badge: totalOwedToSuppliers > 0 ? t.statusUnpaid : t.statusPaid,
     },
@@ -182,11 +174,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
       value: `${totalReceivableFromCustomers.toLocaleString()} ${t.currency}`,
       subvalue: `${db.customers.filter(c => c.balanceOwed > 0).length} ${t.navCustomers}`,
       icon: Users,
-      bg: 'bg-slate-900/90 hover:bg-slate-850',
-      border: 'border-blue-500/30 hover:border-blue-500/60',
-      textColor: 'text-blue-400',
-      accentColor: 'text-blue-300',
-      iconBg: 'bg-blue-500/15 text-blue-400',
+      bg: 'bg-white hover:bg-blue-50/40',
+      border: 'border-slate-200 hover:border-blue-400',
+      textColor: 'text-blue-700',
+      iconBg: 'bg-blue-100 text-blue-700',
       tab: 'customers',
       badge: totalReceivableFromCustomers > 0 ? t.statusUnpaid : t.statusPaid,
     },
@@ -196,11 +187,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
       value: `${totalSalesAmount.toLocaleString()} ${t.currency}`,
       subvalue: `${totalSalesKg.toLocaleString()} ${t.kilo} (${Math.round(totalSalesKg / 50)} ${t.bag})`,
       icon: TrendingUp,
-      bg: 'bg-slate-900/90 hover:bg-slate-850',
-      border: 'border-cyan-500/30 hover:border-cyan-500/60',
-      textColor: 'text-cyan-400',
-      accentColor: 'text-cyan-300',
-      iconBg: 'bg-cyan-500/15 text-cyan-400',
+      bg: 'bg-white hover:bg-cyan-50/40',
+      border: 'border-slate-200 hover:border-cyan-400',
+      textColor: 'text-cyan-700',
+      iconBg: 'bg-cyan-100 text-cyan-700',
       tab: 'sales',
       badge: `${totalGrossProfit.toLocaleString()} ${t.currency}`,
     },
@@ -210,11 +200,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
       value: `${moneyInHand.toLocaleString()} ${t.currency}`,
       subvalue: t.moneyInHandCard,
       icon: Wallet,
-      bg: 'bg-slate-900/90 hover:bg-slate-850',
-      border: 'border-emerald-400/40 hover:border-emerald-400/70',
-      textColor: 'text-emerald-300',
-      accentColor: 'text-emerald-200',
-      iconBg: 'bg-emerald-500/20 text-emerald-300',
+      bg: 'bg-white hover:bg-emerald-50/40',
+      border: 'border-slate-200 hover:border-emerald-500',
+      textColor: 'text-emerald-800',
+      iconBg: 'bg-emerald-100 text-emerald-800',
       tab: 'expenses',
       badge: t.currency,
     },
@@ -224,11 +213,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
       value: `${totalExpenses.toLocaleString()} ${t.currency}`,
       subvalue: `${db.expenses.length} ${t.records}`,
       icon: Receipt,
-      bg: 'bg-slate-900/90 hover:bg-slate-850',
-      border: 'border-orange-500/30 hover:border-orange-500/60',
-      textColor: 'text-orange-400',
-      accentColor: 'text-orange-300',
-      iconBg: 'bg-orange-500/15 text-orange-400',
+      bg: 'bg-white hover:bg-amber-50/40',
+      border: 'border-slate-200 hover:border-amber-500',
+      textColor: 'text-amber-800',
+      iconBg: 'bg-amber-100 text-amber-800',
       tab: 'expenses',
       badge: `${db.expenses.length} ${t.records}`,
     },
@@ -238,11 +226,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
       value: `${dailyProcessedKg.toLocaleString()} ${t.kilo}`,
       subvalue: `${dailyProcessedBags} ${t.bag} (${todayBatches.length} ${t.records})`,
       icon: CalendarClock,
-      bg: 'bg-slate-900/90 hover:bg-slate-850',
-      border: 'border-indigo-500/30 hover:border-indigo-500/60',
-      textColor: 'text-indigo-400',
-      accentColor: 'text-indigo-300',
-      iconBg: 'bg-indigo-500/15 text-indigo-400',
+      bg: 'bg-white hover:bg-indigo-50/40',
+      border: 'border-slate-200 hover:border-indigo-400',
+      textColor: 'text-indigo-700',
+      iconBg: 'bg-indigo-100 text-indigo-700',
       tab: 'formula',
       badge: `${todayBatches.length} ${t.records}`,
     },
@@ -252,34 +239,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
     <div className="space-y-6">
       {/* 0. SUPABASE CONNECTION STATUS */}
       <div className="flex justify-end">
-        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-bold tracking-wider backdrop-blur-md transition-all ${
+        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-bold tracking-wider transition-all shadow-xs ${
           isSupabaseConnected 
-            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-lg shadow-emerald-500/5' 
-            : 'bg-slate-900/50 text-slate-500 border-slate-800'
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+            : 'bg-white text-slate-500 border-slate-200'
         }`}>
-          <div className={`w-1.5 h-1.5 rounded-full ${isSupabaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+          <div className={`w-1.5 h-1.5 rounded-full ${isSupabaseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
           <span>{isSupabaseConnected ? 'SUPABASE: ACTIVE' : 'SUPABASE: DISCONNECTED'}</span>
         </div>
       </div>
 
       {/* 1. VISUAL NOTIFICATION SYSTEM BANNER (LOW STOCK HIGHLIGHT) */}
       {lowStockMaterials.length > 0 ? (
-        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-rose-950/70 via-slate-900/90 to-amber-950/60 border border-rose-500/40 shadow-xl shadow-rose-950/20 relative overflow-hidden">
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-rose-50 via-amber-50/50 to-white border border-rose-200 shadow-sm relative overflow-hidden">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-3.5">
-              <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-400 shrink-0 animate-pulse">
+              <div className="p-3 rounded-xl bg-rose-100 border border-rose-200 text-rose-600 shrink-0 animate-pulse">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-base sm:text-lg text-white">
+                  <h3 className="font-bold text-base sm:text-lg text-slate-900">
                     {t.lowStockNotificationTitle}
                   </h3>
-                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-500 text-white">
+                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white">
                     {lowStockMaterials.length} {t.itemsCount}
                   </span>
                 </div>
-                <p className="text-xs sm:text-sm text-slate-300 mt-1">
+                <p className="text-xs sm:text-sm text-slate-600 mt-1">
                   {t.lowStockWarningMessage
                     .replace('{count}', lowStockMaterials.length.toString())
                     .replace('{threshold}', lowStockThreshold.toLocaleString())}
@@ -296,9 +283,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
                     setThresholdInput(lowStockThreshold.toString());
                     setEditingThreshold(true);
                   }}
-                  className="px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition-colors"
+                  className="px-3 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition-colors shadow-2xs"
                 >
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-amber-600" />
                   <span>{t.lowStockThresholdLabel} {lowStockThreshold.toLocaleString()} {t.kilo}</span>
                 </button>
               ) : (
@@ -309,18 +296,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
                     step="100"
                     value={thresholdInput}
                     onChange={(e) => setThresholdInput(e.target.value)}
-                    className="w-24 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono"
+                    className="w-24 bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-900 font-mono shadow-2xs"
                   />
                   <button
                     type="submit"
-                    className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold"
+                    className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs"
                   >
                     {t.saveThreshold}
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditingThreshold(false)}
-                    className="px-2 py-1 rounded-lg bg-slate-800 text-slate-400 text-xs"
+                    className="px-2 py-1 rounded-lg bg-slate-200 text-slate-700 text-xs"
                   >
                     {t.cancel}
                   </button>
@@ -330,7 +317,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
               <button
                 type="button"
                 onClick={() => setActiveTab('inventory')}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-bold shadow-md shadow-amber-500/20 transition-all flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md shadow-amber-600/25 transition-all flex items-center gap-1.5"
               >
                 <span>{t.restockNow}</span>
                 {isRtl ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
@@ -339,16 +326,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
           </div>
 
           {/* Visual Chips of Highlighted Low Stock Materials */}
-          <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-slate-400">{t.itemsNeedRestock}:</span>
+          <div className="mt-4 pt-3 border-t border-rose-200/60 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-slate-500">{t.itemsNeedRestock}:</span>
             {lowStockMaterials.map(rm => (
               <span
                 key={rm.id}
                 onClick={() => setActiveTab('inventory')}
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-xs font-semibold text-rose-300 cursor-pointer transition-colors"
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-white border border-rose-200 hover:border-rose-400 text-xs font-semibold text-rose-700 cursor-pointer transition-colors shadow-2xs"
               >
                 <span>{getLocalizedName(rm.name)}</span>
-                <span className="font-mono bg-rose-500/30 px-1.5 py-0.5 rounded text-[11px] text-white">
+                <span className="font-mono bg-rose-100 px-1.5 py-0.5 rounded text-[11px] text-rose-800">
                   {rm.stockKg.toLocaleString()} {t.kilo}
                 </span>
               </span>
@@ -356,12 +343,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
           </div>
         </div>
       ) : (
-        <div className="p-4 rounded-2xl bg-slate-900/80 border border-emerald-500/20 flex items-center justify-between gap-3 text-xs sm:text-sm text-slate-300">
+        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3 text-xs sm:text-sm text-emerald-800 shadow-xs">
           <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-            <span>{t.allStockHealthy}</span>
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span className="font-semibold">{t.allStockHealthy}</span>
           </div>
-          <span className="text-xs text-slate-400 font-mono">
+          <span className="text-xs text-emerald-700 font-mono">
             {t.lowStockThresholdLabel} {lowStockThreshold.toLocaleString()} {t.kilo}
           </span>
         </div>
@@ -370,10 +357,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
       {/* 2. RECTANGULAR CLICKABLE METRIC TABLES / CARDS */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-bold text-white tracking-tight">
+          <h2 className="text-base font-bold text-slate-900 tracking-tight">
             {t.companySubtitle}
           </h2>
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-500 font-medium">
             {t.viewDetails}
           </span>
         </div>
@@ -385,25 +372,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
               <div
                 key={card.id}
                 onClick={() => setActiveTab(card.tab)}
-                className={`p-5 rounded-2xl border transition-all duration-200 cursor-pointer group shadow-lg shadow-black/40 hover:-translate-y-0.5 ${card.bg} ${card.border}`}
+                className={`p-5 rounded-2xl border transition-all duration-200 cursor-pointer group shadow-sm hover:shadow-md hover:-translate-y-0.5 ${card.bg} ${card.border}`}
               >
                 <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className={`p-2.5 rounded-xl ${card.iconBg} transition-transform group-hover:scale-110`}>
+                  <div className={`p-2.5 rounded-xl ${card.iconBg} transition-transform group-hover:scale-110 shadow-2xs`}>
                     <Icon className="w-5 h-5" />
                   </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800/80 border border-slate-700/80 text-slate-300">
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 border border-slate-200 text-slate-700">
                     {card.badge}
                   </span>
                 </div>
 
                 <div className="space-y-1">
-                  <span className="text-xs font-medium text-slate-400 block line-clamp-1">
+                  <span className="text-xs font-medium text-slate-500 block line-clamp-1">
                     {card.title}
                   </span>
                   <div className={`text-xl sm:text-2xl font-black tracking-tight font-mono ${card.textColor}`}>
                     {card.value}
                   </div>
-                  <p className="text-xs text-slate-400 line-clamp-1 pt-1 border-t border-slate-800/80">
+                  <p className="text-xs text-slate-500 line-clamp-1 pt-1 border-t border-slate-100">
                     {card.subvalue}
                   </p>
                 </div>
@@ -416,13 +403,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
       {/* 3. CHARTS & ANALYTICS ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sales & Profit Trend (2 Columns) */}
-        <div className="lg:col-span-2 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
+        <div className="lg:col-span-2 p-5 rounded-2xl bg-white border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-bold text-sm text-white">{t.salesSummary} & {t.reportsTitle}</h3>
-              <p className="text-xs text-slate-400">{t.periodWeekly}</p>
+              <h3 className="font-bold text-sm text-slate-900">{t.salesSummary} & {t.reportsTitle}</h3>
+              <p className="text-xs text-slate-500">{t.periodWeekly}</p>
             </div>
-            <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+            <span className="text-xs font-mono text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 font-semibold">
               {t.netProfit}: {totalGrossProfit.toLocaleString()} {t.currency}
             </span>
           </div>
@@ -432,39 +419,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
               <AreaChart data={trendData}>
                 <defs>
                   <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#d97706" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#d97706" stopOpacity={0}/>
                   </linearGradient>
                   <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#059669" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#059669" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} />
-                <YAxis stroke="#94a3b8" fontSize={11} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="date" stroke="#64748b" fontSize={11} />
+                <YAxis stroke="#64748b" fontSize={11} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#fff' }}
+                  contentStyle={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', borderRadius: '12px', color: '#0f172a', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                 />
                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                <Area type="monotone" dataKey="sales" name={t.totalSaleAmount} stroke="#f59e0b" fillOpacity={1} fill="url(#salesGrad)" />
-                <Area type="monotone" dataKey="profit" name={t.netProfit} stroke="#10b981" fillOpacity={1} fill="url(#profitGrad)" />
+                <Area type="monotone" dataKey="sales" name={t.totalSaleAmount} stroke="#d97706" strokeWidth={2} fillOpacity={1} fill="url(#salesGrad)" />
+                <Area type="monotone" dataKey="profit" name={t.netProfit} stroke="#059669" strokeWidth={2} fillOpacity={1} fill="url(#profitGrad)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Raw Material Inventory Distribution (1 Column) */}
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl flex flex-col justify-between">
+        <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <h3 className="font-bold text-sm text-white">{t.inventoryTitle}</h3>
-              <p className="text-xs text-slate-400">{t.totalFormulaWeight} (kg)</p>
+              <h3 className="font-bold text-sm text-slate-900">{t.inventoryTitle}</h3>
+              <p className="text-xs text-slate-500">{t.totalFormulaWeight} (kg)</p>
             </div>
             <button
               type="button"
               onClick={() => setActiveTab('inventory')}
-              className="text-xs text-amber-400 hover:underline font-semibold"
+              className="text-xs text-amber-600 hover:underline font-semibold"
             >
               {t.viewDetails}
             </button>
@@ -487,7 +474,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
                   ))}
                 </Pie>
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#fff' }}
+                  contentStyle={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', borderRadius: '12px', color: '#0f172a', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                   formatter={(value: any) => [`${Number(value).toLocaleString()} ${t.kilo}`, '']}
                 />
               </PieChart>
@@ -495,9 +482,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
           </div>
 
           {/* Legend chips */}
-          <div className="flex flex-wrap gap-1.5 justify-center max-h-20 overflow-y-auto">
+          <div className="flex flex-wrap gap-1.5 justify-center max-h-20 overflow-y-auto pt-2 border-t border-slate-100">
             {inventoryPieData.map((item, idx) => (
-              <span key={item.name} className="inline-flex items-center gap-1.5 text-[10px] text-slate-300 bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800">
+              <span key={item.name} className="inline-flex items-center gap-1.5 text-[10px] text-slate-700 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                 <span>{item.name}</span>
               </span>

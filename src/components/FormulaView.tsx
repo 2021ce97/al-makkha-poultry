@@ -9,8 +9,7 @@ import {
   PackageCheck, 
   CalendarClock, 
   Sparkles, 
-  DollarSign,
-  Info
+  DollarSign
 } from 'lucide-react';
 
 export const FormulaView: React.FC = () => {
@@ -98,7 +97,7 @@ export const FormulaView: React.FC = () => {
   });
 
   const costPerKg = totalBatchWeight > 0 ? totalBatchCost / totalBatchWeight : 0;
-  const costPerBag = costPerKg * 50; // 50kg bag
+  const costPerBag = costPerKg * 50;
   const totalBags = Math.round(totalBatchWeight / 50);
 
   const handleProduce = (e: React.FormEvent) => {
@@ -106,290 +105,291 @@ export const FormulaView: React.FC = () => {
     setMessage(null);
 
     if (!formulaName.trim()) {
-      setMessage({ type: 'error', text: t.formulaTitle });
-      return;
-    }
-    if (ingredients.length === 0 || totalBatchWeight <= 0) {
-      setMessage({ type: 'error', text: t.weightToUse });
+      setMessage({ type: 'error', text: 'لطفاً نام دانه / فرمول را وارد کنید.' });
       return;
     }
 
-    const result = createFormulaAndProduce(
+    if (totalBatchWeight <= 0) {
+      setMessage({ type: 'error', text: 'وزن کل مواد مصرفی باید بیشتر از صفر باشد.' });
+      return;
+    }
+
+    // Check if we have enough raw materials in stock
+    for (const ing of ingredients) {
+      const raw = db.rawMaterials.find(r => r.id === ing.rawMaterialId);
+      if (!raw) {
+        setMessage({ type: 'error', text: 'یک ماده خام نامعتبر انتخاب شده است.' });
+        return;
+      }
+      if (raw.stockKg < ing.weightKg) {
+        setMessage({ 
+          type: 'error', 
+          text: `موجودی "${getLocalizedName(raw.name)}" کافی نیست! موجودی انبار: ${raw.stockKg} کجوری، مقدار درخواستی: ${ing.weightKg} کیلو.` 
+        });
+        return;
+      }
+    }
+
+    createFormulaAndProduce(
       formulaName.trim(),
-      ingredients.map(ing => ({
-        rawMaterialId: ing.rawMaterialId,
-        weightKg: Number(ing.weightKg) || 0,
-      })),
+      ingredients,
       description.trim() || undefined,
       operatorName.trim() || undefined,
       true
     );
 
-    if (!result.success) {
-      setMessage({ type: 'error', text: result.error || t.insufficientStockError });
-    } else {
-      setMessage({
-        type: 'success',
-        text: `${t.statusNormal}: ${totalBatchWeight.toLocaleString()} ${t.kilo} (${totalBags} ${t.bag})`,
-      });
-      setFormulaName('');
-      setDescription('');
-    }
+    setMessage({ 
+      type: 'success', 
+      text: `پروسس دانه "${formulaName}" با موفقیت انجام شد! ${totalBatchWeight.toLocaleString()} کیلو دانه آماده به انبار اضافه گردید.` 
+    });
+
+    // Reset form
+    setFormulaName('');
+    setDescription('');
+    setOperatorName('');
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-amber-100 text-amber-700">
               <Scale className="w-5 h-5" />
             </div>
             <span>{t.formulaTitle}</span>
           </h2>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-600 mt-1">
             {t.formulaDesc}
           </p>
         </div>
 
-        {/* Quick template buttons */}
+        {/* Quick Presets */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400 hidden sm:inline">فورمول‌های آماده:</span>
+          <span className="text-xs font-semibold text-slate-500 hidden md:inline">پیش‌فرض‌های کارخانه:</span>
           <button
             type="button"
             onClick={() => applyTemplate('starter')}
-            className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500 text-xs font-semibold text-slate-300 hover:text-amber-400 transition-colors"
+            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors"
           >
-            استارتر (Starter)
+            استارتر (۲۲٪)
           </button>
           <button
             type="button"
             onClick={() => applyTemplate('grower')}
-            className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500 text-xs font-semibold text-slate-300 hover:text-amber-400 transition-colors"
+            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors"
           >
-            گروور (Grower)
+            گروور (۲۰٪)
           </button>
           <button
             type="button"
             onClick={() => applyTemplate('layer')}
-            className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500 text-xs font-semibold text-slate-300 hover:text-amber-400 transition-colors"
+            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors"
           >
-            تخمی (Layer)
+            تخمی (لیر)
           </button>
         </div>
       </div>
 
       {message && (
-        <div className={`p-4 rounded-2xl text-xs flex items-center gap-2 border ${
-          message.type === 'success'
-            ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
-            : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+        <div className={`p-4 rounded-xl border flex items-center gap-3 text-xs sm:text-sm ${
+          message.type === 'success' 
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+            : 'bg-rose-50 border-rose-200 text-rose-800'
         }`}>
-          {message.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+          {message.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />}
           <span>{message.text}</span>
         </div>
       )}
 
-      {/* Main Production Form & Calculation Box */}
+      {/* Main Recipe Builder & Production Form */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Form area (2 cols) */}
-        <div className="lg:col-span-2 bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-xl">
+        {/* Ingredients Form (2 Columns) */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-600" />
+            <span>تنظیمات بچ تولید و ترکیب مواد خام</span>
+          </h3>
+
           <form onSubmit={handleProduce} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  نام فورمول / محصول پروسس شده *
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  نام دانه / فرمول تولید شده *
                 </label>
                 <input
                   type="text"
                   required
                   value={formulaName}
                   onChange={(e) => setFormulaName(e.target.value)}
-                  placeholder="مثال: دانه گوشتی استارتر"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                  placeholder="مثال: دانه برویلر گروور ممتاز"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  نام مسئول یا اوپراتور خط تولید
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  نام اپراتور خط تولید
                 </label>
                 <input
                   type="text"
                   value={operatorName}
                   onChange={(e) => setOperatorName(e.target.value)}
-                  placeholder="مثال: استاد حمید"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                  placeholder="نام مسئول پروسس"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                توضیحات و مشخصات تغذیه‌ای
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                توضیحات فرمول
               </label>
               <input
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="فیصدی پروتین، کلسیم، ویتامین‌ها..."
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                placeholder="مثال: فرمول استاندارد با ارزش پروتئین بالا"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
               />
             </div>
 
-            {/* Ingredients Table */}
-            <div className="border-t border-slate-800 pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  مواد خام مصرفی (میکس تولید دانه)
-                </h3>
+            {/* Ingredients Table / Rows */}
+            <div className="mt-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  اقلام مواد خام مصرفی در این بچ
+                </label>
                 <button
                   type="button"
                   onClick={handleAddIngredientRow}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-semibold flex items-center gap-1"
+                  className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>{t.addIngredient}</span>
+                  <span>افزودن ماده خام</span>
                 </button>
               </div>
 
               <div className="space-y-2.5">
-                {ingredients.map((ing, index) => {
-                  const rawItem = db.rawMaterials.find(r => r.id === ing.rawMaterialId);
-                  const cost = rawItem ? rawItem.unitPrice * (Number(ing.weightKg) || 0) : 0;
-                  const isLow = rawItem && rawItem.stockKg < (Number(ing.weightKg) || 0);
+                {ingredients.map((ing, idx) => {
+                  const selectedRaw = db.rawMaterials.find(r => r.id === ing.rawMaterialId);
+                  const cost = selectedRaw ? selectedRaw.unitPrice * (Number(ing.weightKg) || 0) : 0;
+                  const isInsufficient = selectedRaw && selectedRaw.stockKg < (Number(ing.weightKg) || 0);
 
                   return (
-                    <div
-                      key={index}
-                      className={`p-3 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center gap-3 transition-colors ${
-                        isLow ? 'bg-rose-950/20 border-rose-500/40' : 'bg-slate-950 border-slate-800'
+                    <div 
+                      key={idx}
+                      className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isInsufficient ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-200'
                       }`}
                     >
-                      {/* Material Select */}
-                      <div className="flex-1 w-full sm:w-auto">
+                      <div className="flex-1 min-w-0">
+                        <label className="block text-[10px] text-slate-500 mb-1">انتخاب ماده خام #{idx + 1}</label>
                         <select
                           value={ing.rawMaterialId}
-                          onChange={(e) => handleUpdateIngredient(index, 'rawMaterialId', e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                          onChange={(e) => handleUpdateIngredient(idx, 'rawMaterialId', e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs font-medium"
                         >
                           {db.rawMaterials.map(rm => (
                             <option key={rm.id} value={rm.id}>
-                              {getLocalizedName(rm.name)} (موجودی: {rm.stockKg.toLocaleString()} kg | {rm.unitPrice} {t.currency}/kg)
+                              {getLocalizedName(rm.name)} (موجودی: {rm.stockKg.toLocaleString()} کجوری • {rm.unitPrice} {t.currency}/kg)
                             </option>
                           ))}
                         </select>
-                        {isLow && (
-                          <span className="text-[11px] text-rose-400 font-bold block mt-1">
-                            ⚠️ موجودی ناکافی است! (فقط {rawItem?.stockKg} کیلو در گدام موجود است)
-                          </span>
-                        )}
                       </div>
 
-                      {/* Weight in Kilos */}
                       <div className="w-full sm:w-36">
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="1"
-                            step="any"
-                            value={ing.weightKg}
-                            onChange={(e) => handleUpdateIngredient(index, 'weightKg', Number(e.target.value))}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono font-bold focus:outline-none focus:border-amber-500"
-                          />
-                          <span className="absolute end-2 top-1.5 text-[11px] text-slate-500">
-                            {t.kilo}
-                          </span>
-                        </div>
+                        <label className="block text-[10px] text-slate-500 mb-1">وزن (کیلوگرم)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="any"
+                          value={ing.weightKg}
+                          onChange={(e) => handleUpdateIngredient(idx, 'weightKg', e.target.value ? Number(e.target.value) : 0)}
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-mono focus:outline-none focus:border-amber-600 shadow-2xs"
+                        />
                       </div>
 
-                      {/* Subtotal cost display */}
-                      <div className="w-full sm:w-28 text-end">
-                        <span className="font-bold text-amber-400 font-mono text-xs">
+                      <div className="w-full sm:w-32 text-end sm:pt-4">
+                        <span className="text-[10px] text-slate-500 block">هزینه کل</span>
+                        <span className="text-xs font-bold text-amber-700 font-mono">
                           {cost.toLocaleString()} {t.currency}
                         </span>
                       </div>
 
-                      {/* Remove row */}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveIngredientRow(index)}
-                        disabled={ingredients.length <= 1}
-                        className="p-1.5 text-slate-500 hover:text-rose-400 disabled:opacity-30 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="sm:pt-4">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveIngredientRow(idx)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* Deduct Notice */}
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-start gap-2">
-              <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <span>{t.produceDeductNotice}</span>
-            </div>
-
-            {/* Submit Produce Button */}
-            <div className="flex items-center justify-end pt-2">
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
               <button
                 type="submit"
-                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer active:scale-95"
+                className="px-6 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-md shadow-amber-600/25 transition-all flex items-center gap-2"
               >
                 <PackageCheck className="w-4 h-4" />
-                <span>{t.createFormulaBtn}</span>
+                <span>ثبت پروسس و تولید دانه</span>
               </button>
             </div>
           </form>
         </div>
 
-        {/* Real-time Calculation Card (1 col) */}
-        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl flex flex-col justify-between space-y-4">
+        {/* Real-time Calculation Panel (1 Column) */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-6">
           <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2 pb-3 border-b border-slate-800">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 pb-3 border-b border-slate-100">
+              <DollarSign className="w-4 h-4 text-emerald-600" />
               <span>محاسبه خودکار وزن و قیمت تمام‌شد</span>
             </h3>
 
             <div className="space-y-3 mt-4">
               {/* Total Weight */}
-              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-xs text-slate-400 block">{t.totalFormulaWeight}</span>
-                <div className="text-2xl font-black font-mono text-white mt-1">
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <span className="text-xs text-slate-500 block">{t.totalFormulaWeight}</span>
+                <div className="text-2xl font-black font-mono text-slate-900 mt-1">
                   {totalBatchWeight.toLocaleString()} {t.kilo}
                 </div>
-                <div className="text-xs text-amber-400 mt-1 font-mono">
+                <div className="text-xs text-amber-700 mt-1 font-mono font-medium">
                   معادل {totalBags.toLocaleString()} {t.bag} • {(totalBatchWeight / 1000).toFixed(2)} {t.ton}
                 </div>
               </div>
 
               {/* Total Batch Cost */}
-              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800">
-                <span className="text-xs text-slate-400 block">{t.totalBatchCost}</span>
-                <div className="text-xl font-bold font-mono text-cyan-400 mt-1">
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <span className="text-xs text-slate-500 block">{t.totalBatchCost}</span>
+                <div className="text-xl font-bold font-mono text-cyan-700 mt-1">
                   {totalBatchCost.toLocaleString()} {t.currency}
                 </div>
                 <span className="text-xs text-slate-500">مجموع هزینه مواد خام مصرفی</span>
               </div>
 
               {/* Cost per Kilo Result */}
-              <div className="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-                <span className="text-xs font-semibold text-emerald-400 block">
+              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                <span className="text-xs font-semibold text-emerald-700 block">
                   {t.costPerKiloResult}:
                 </span>
-                <div className="text-2xl font-black font-mono text-emerald-300 mt-1">
+                <div className="text-2xl font-black font-mono text-emerald-800 mt-1">
                   {costPerKg.toFixed(2)} {t.currency}
                 </div>
-                <span className="text-xs text-emerald-400 block mt-1 font-mono">
+                <span className="text-xs text-emerald-700 block mt-1 font-mono">
                   {t.costPerBagResult}: <strong>{costPerBag.toFixed(0)} {t.currency}</strong>
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400">
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600">
             💡 این نرخ تمام‌شد به صورت خودکار در صفحه فروشات نمایش داده می‌شود تا از سوددهی فاکتور اطمینان حاصل شود.
           </div>
         </div>
@@ -398,9 +398,9 @@ export const FormulaView: React.FC = () => {
       {/* Processed Stock Inventory & History Tables */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Processed Feed Stock */}
-        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-3">
-            <PackageCheck className="w-4 h-4 text-emerald-400" />
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-3">
+            <PackageCheck className="w-4 h-4 text-emerald-600" />
             <span>موجودی دانه پروسس شده در انبار (آماده فروش)</span>
           </h3>
 
@@ -410,19 +410,19 @@ export const FormulaView: React.FC = () => {
               return (
                 <div
                   key={p.id}
-                  className="p-3.5 rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-between gap-3 text-xs"
+                  className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-3 text-xs"
                 >
                   <div>
-                    <h4 className="font-bold text-white text-sm">{getLocalizedName(p.name)}</h4>
-                    <span className="text-[11px] text-slate-400">
-                      نرخ تمام‌شد: <strong className="font-mono text-amber-400">{p.averageCostPerKg} {t.currency}</strong> /kg
+                    <h4 className="font-bold text-slate-900 text-sm">{getLocalizedName(p.name)}</h4>
+                    <span className="text-[11px] text-slate-500">
+                      نرخ تمام‌شد: <strong className="font-mono text-amber-700">{p.averageCostPerKg} {t.currency}</strong> /kg
                     </span>
                   </div>
                   <div className="text-end">
-                    <div className="font-bold font-mono text-emerald-400 text-sm">
+                    <div className="font-bold font-mono text-emerald-700 text-sm">
                       {p.stockKg.toLocaleString()} {t.kilo}
                     </div>
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-[11px] text-slate-500">
                       ({bags} {t.bag})
                     </span>
                   </div>
@@ -433,9 +433,9 @@ export const FormulaView: React.FC = () => {
         </div>
 
         {/* Recent Production Batches */}
-        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-3">
-            <CalendarClock className="w-4 h-4 text-amber-400" />
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-3">
+            <CalendarClock className="w-4 h-4 text-amber-600" />
             <span>تاریخچه خط تولید و پروسس روزانه</span>
           </h3>
 
@@ -443,19 +443,19 @@ export const FormulaView: React.FC = () => {
             {db.productionBatches.slice(0, 5).map(b => (
               <div
                 key={b.id}
-                className="p-3.5 rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-between text-xs"
+                className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-center justify-between text-xs"
               >
                 <div>
-                  <h4 className="font-bold text-white">{getLocalizedName(b.formulaName)}</h4>
-                  <span className="text-[11px] text-slate-400">
+                  <h4 className="font-bold text-slate-900">{getLocalizedName(b.formulaName)}</h4>
+                  <span className="text-[11px] text-slate-500">
                     تاریخ: {b.date} {b.operatorName ? `• اپراتور: ${b.operatorName}` : ''}
                   </span>
                 </div>
                 <div className="text-end">
-                  <span className="font-bold font-mono text-white block">
+                  <span className="font-bold font-mono text-slate-900 block">
                     {b.totalWeightKg.toLocaleString()} {t.kilo}
                   </span>
-                  <span className="text-[11px] text-slate-400">
+                  <span className="text-[11px] text-slate-500">
                     {Math.round(b.totalWeightKg / 50)} {t.bag}
                   </span>
                 </div>
