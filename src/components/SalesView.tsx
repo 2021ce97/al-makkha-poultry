@@ -427,7 +427,7 @@ export const SalesView: React.FC = () => {
                     >
                       {db.processedStock.map(p => (
                         <option key={p.id} value={p.id}>
-                          {getLocalizedName(p.name)} (موجودی: {p.stockKg.toLocaleString()} kg • تمام‌شد: {p.averageCostPerKg} {t.currency}/kg)
+                          {getLocalizedName(p.name)} (موجودی: {(p.stockKg / 1000).toFixed(2)} تن • {p.stockKg.toLocaleString()} kg • تمام‌شد: {(p.averageCostPerKg * 1000).toLocaleString()} {t.currency}/تن)
                         </option>
                       ))}
                     </select>

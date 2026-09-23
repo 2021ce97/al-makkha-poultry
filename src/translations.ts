@@ -260,6 +260,14 @@ export const translations = {
     confirmDeleteFormula: 'آیا از حذف این فرمول اطمینان دارید؟',
     developedBy: 'Developed by: rayan-tech-solutions.tech',
     costRateInfo: 'قیمت تمام‌شد برای کارخانه:',
+    costPerTonResult: 'قیمت تمام‌شد فی تن (۲۰ بوجی)',
+    costPerTon: 'نرخ فی تن',
+    processedStockInTons: 'موجودی به تن',
+    unitConverter: 'تبدیل سریع واحدها (تن / بوجی / کیلو)',
+    allUnits: 'همه واحدها',
+    tons: 'تن',
+    bags: 'بوجی',
+    kilos: 'کیلوگرم',
   },
   
   ps: {
@@ -521,6 +529,14 @@ export const translations = {
     confirmDeleteFormula: 'ایا تاسو ډاډه یاست چې دا فورمول ړنګ کړئ؟',
     developedBy: 'Developed by: rayan-tech-solutions.tech',
     costRateInfo: 'د فابریکې لپاره تمام شوی بیه:',
+    costPerTonResult: 'د هر ټن تمامه بیه (۲۰ بوجۍ)',
+    costPerTon: 'د هر ټن نرخ',
+    processedStockInTons: 'په ټن موجودي',
+    unitConverter: 'د واحدونو اسانه بدلول (ټن / بوجۍ / کيلو)',
+    allUnits: 'ټول واحدونه',
+    tons: 'ټن',
+    bags: 'بوجۍ',
+    kilos: 'کيلوګرام',
   },
   
   en: {
@@ -784,6 +800,14 @@ export const translations = {
     costRateInfo: 'Factory Cost Rate:',
     estimatedProfitExplanation: 'Estimated Net Profit = Total Revenue minus Total Cost of Goods Sold (Quantity × Average Production Cost per Kg)',
     costRateVisibilityToggle: 'Cost rate & profit visibility toggle for privacy',
+    costPerTonResult: 'Cost per Ton (20 Bags)',
+    costPerTon: 'Rate per Ton',
+    processedStockInTons: 'Stock in Tons',
+    unitConverter: 'Quick Unit Converter (Ton / Bag / Kg)',
+    allUnits: 'All Units',
+    tons: 'Tons',
+    bags: 'Bags',
+    kilos: 'Kilograms',
   },
 };
 
