@@ -167,19 +167,31 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Initial Supabase Load & Real-time Subscription
   useEffect(() => {
-    if (!supabase) return;
-    setIsSupabaseConnected(true);
+    if (!supabase) {
+      setIsSupabaseConnected(false);
+      return;
+    }
 
     let isMounted = true;
+    let isInitialLoadComplete = false;
 
     // 1. Fetch live tables from Supabase
-    loadStateFromSupabase().then(loadedState => {
+    loadStateFromSupabase().then(result => {
       if (!isMounted) return;
-      if (loadedState) {
-        setDb(loadedState);
+      if (result?.hasData) {
+        setIsSupabaseConnected(true);
+        setDb(result.state);
+        isInitialLoadComplete = true;
+      } else if (result) {
+        setIsSupabaseConnected(true);
+        // Never replace a local backup with factory data when the remote database is empty.
+        seedInitialDataToSupabase(db).finally(() => {
+          isInitialLoadComplete = true;
+        });
       } else {
-        // Supabase tables are freshly initialized and empty, seed factory data
-        seedInitialDataToSupabase(initialFactoryData);
+        setIsSupabaseConnected(false);
+        console.error('Supabase hydration failed; keeping the local database backup.');
+        isInitialLoadComplete = true;
       }
     });
 
@@ -190,9 +202,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         'postgres_changes',
         { event: '*', schema: 'public' },
         () => {
-          loadStateFromSupabase().then(latest => {
-            if (isMounted && latest) {
-              setDb(latest);
+          if (!isInitialLoadComplete) return;
+          loadStateFromSupabase().then(result => {
+            if (isMounted && result?.hasData) {
+              setIsSupabaseConnected(true);
+              setDb(result.state);
             }
           });
         }

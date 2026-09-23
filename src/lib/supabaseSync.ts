@@ -15,10 +15,15 @@ import {
 
 export const isSupabaseConfigured = () => !!supabase;
 
+export interface SupabaseLoadResult {
+  state: DatabaseState;
+  hasData: boolean;
+}
+
 /**
  * Loads the complete database state from Supabase tables.
  */
-export async function loadStateFromSupabase(): Promise<DatabaseState | null> {
+export async function loadStateFromSupabase(): Promise<SupabaseLoadResult | null> {
   if (!supabase) return null;
 
   try {
@@ -46,9 +51,21 @@ export async function loadStateFromSupabase(): Promise<DatabaseState | null> {
       supabase.from('production_batches').select('*').order('date', { ascending: false }),
     ]);
 
-    // Check if any critical query failed
-    if (rawRes.error || custRes.error || salesRes.error) {
-      console.warn('Supabase fetch error:', rawRes.error || custRes.error || salesRes.error);
+    const queryResults = [
+      rawRes,
+      supRes,
+      supTxRes,
+      custRes,
+      custTxRes,
+      procRes,
+      salesRes,
+      expRes,
+      formRes,
+      batchRes,
+    ];
+    const failedQuery = queryResults.find(result => result.error);
+    if (failedQuery?.error) {
+      console.error('Supabase fetch error:', failedQuery.error);
       return null;
     }
 
@@ -187,13 +204,7 @@ export async function loadStateFromSupabase(): Promise<DatabaseState | null> {
     const totalExpensesCash = expenses.reduce((acc, e) => acc + e.amount, 0);
     const calculatedCash = 1850000 + (totalSalesCash + totalCustomerDebtReceived) - totalExpensesCash;
 
-    // If tables are empty, return null so caller can seed
-    const hasData = rawMaterials.length > 0 || customers.length > 0 || sales.length > 0 || suppliers.length > 0;
-    if (!hasData) {
-      return null;
-    }
-
-    return {
+    const hasData = [
       rawMaterials,
       processedStock,
       suppliers,
@@ -202,7 +213,20 @@ export async function loadStateFromSupabase(): Promise<DatabaseState | null> {
       productionBatches,
       sales,
       expenses,
-      cashInHand: calculatedCash,
+    ].some(items => items.length > 0);
+    return {
+      hasData,
+      state: {
+        rawMaterials,
+        processedStock,
+        suppliers,
+        customers,
+        formulas,
+        productionBatches,
+        sales,
+        expenses,
+        cashInHand: calculatedCash,
+      },
     };
   } catch (err) {
     console.error('Failed to load state from Supabase:', err);
