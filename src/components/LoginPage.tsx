@@ -138,9 +138,9 @@ export const LoginPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="text-[11px] text-slate-500 hover:text-amber-700 transition-colors font-medium"
+                    className="text-[11px] text-slate-500 hover:text-amber-700 transition-colors font-medium cursor-pointer"
                   >
-                    {showPassword ? 'Hide' : 'Show'}
+                    {showPassword ? (lang === 'fa' ? 'مخفی' : lang === 'ps' ? 'پټول' : 'Hide') : (lang === 'fa' ? 'نمایش' : lang === 'ps' ? 'ښودل' : 'Show')}
                   </button>
                 </div>
                 <div className="relative">

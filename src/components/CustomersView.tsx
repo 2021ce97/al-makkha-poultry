@@ -4,79 +4,95 @@ import { Customer } from '../types';
 import { 
   Users, 
   Search, 
-  Wallet, 
-  History, 
+  Phone, 
+  MapPin, 
   Trash2, 
-  CheckCircle, 
+  X, 
+  Printer, 
+  History, 
+  Wallet, 
   DollarSign, 
-  Phone,
-  MapPin,
-  X,
-  ChevronDown,
-  ChevronUp,
-  ArrowDownLeft,
-  Receipt,
-  Printer
+  Receipt, 
+  ArrowDownLeft, 
+  ChevronDown, 
+  ChevronUp, 
+  CheckCircle,
+  FileSpreadsheet
 } from 'lucide-react';
 
 export const CustomersView: React.FC = () => {
-  const { db, t, receiveCustomerPayment, deleteCustomer } = useDatabase();
+  const { 
+    db, 
+    t, 
+    deleteCustomer, 
+    receiveCustomerPayment,
+    getLocalizedTxType,
+    getLocalizedTxDesc 
+  } = useDatabase();
+
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'debtors' | 'settled'>('all');
+  const [selectedHistoryCustomer, setSelectedHistoryCustomer] = useState<Customer | null>(null);
   const [receiveModalCustomer, setReceiveModalCustomer] = useState<Customer | null>(null);
   const [receivedAmount, setReceivedAmount] = useState<number | ''>('');
   const [paymentNote, setPaymentNote] = useState('');
-  const [selectedHistoryCustomer, setSelectedHistoryCustomer] = useState<Customer | null>(null);
+
+  // Delete customer modal
   const [customerToDelete, setCustomerToDelete] = useState<string | null>(null);
+
+  // Status Filter: 'all' | 'debtors' | 'settled'
+  const [statusFilter, setStatusFilter] = useState<'all' | 'debtors' | 'settled'>('all');
+
+  // Expanded row IDs for inline transaction histories
   const [expandedCustomerIds, setExpandedCustomerIds] = useState<Record<string, boolean>>({});
 
-  const toggleExpand = (id: string) => {
-    setExpandedCustomerIds(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleExpand = (customerId: string) => {
+    setExpandedCustomerIds(prev => ({
+      ...prev,
+      [customerId]: !prev[customerId]
+    }));
   };
 
-  // Filter customers
-  const filteredCustomers = db.customers.filter(c => {
-    const matchesSearch = 
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.phone && c.phone.includes(searchTerm)) ||
-      (c.address && c.address.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    let matchesStatus = true;
-    if (statusFilter === 'debtors') matchesStatus = c.balanceOwed > 0;
-    if (statusFilter === 'settled') matchesStatus = c.balanceOwed === 0;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const totalSalesAll = db.customers.reduce((acc, c) => acc + c.totalPurchasedAmount, 0);
-  const totalPaidAll = db.customers.reduce((acc, c) => acc + c.totalPaid, 0);
-  const totalReceivableDebtAll = db.customers.reduce((acc, c) => acc + c.balanceOwed, 0);
-  const debtorCount = db.customers.filter(c => c.balanceOwed > 0).length;
-
-  const handleOpenReceiveModal = (customer: Customer) => {
-    setReceiveModalCustomer(customer);
-    setReceivedAmount(customer.balanceOwed);
-    setPaymentNote(t.receivePayment);
+  const handleOpenReceiveModal = (c: Customer) => {
+    setReceiveModalCustomer(c);
+    setReceivedAmount(c.balanceOwed);
+    setPaymentNote('');
   };
 
   const handleReceiveSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!receiveModalCustomer || !receivedAmount || Number(receivedAmount) <= 0) return;
+    if (!receiveModalCustomer) return;
+    const amount = Number(receivedAmount);
+    if (isNaN(amount) || amount <= 0) return;
 
-    receiveCustomerPayment(
-      receiveModalCustomer.id,
-      Number(receivedAmount),
-      paymentNote
-    );
-
+    receiveCustomerPayment(receiveModalCustomer.id, amount, paymentNote);
     setReceiveModalCustomer(null);
-    setReceivedAmount('');
-    setPaymentNote('');
   };
+
+  // Aggregated totals
+  const totalSalesAll = db.customers.reduce((acc, c) => acc + (c.totalPurchasedAmount || 0), 0);
+  const totalPaidAll = db.customers.reduce((acc, c) => acc + (c.totalPaid || 0), 0);
+  const totalReceivableDebtAll = db.customers.reduce((acc, c) => acc + (c.balanceOwed || 0), 0);
+  const debtorCount = db.customers.filter(c => (c.balanceOwed || 0) > 0).length;
+
+  const filteredCustomers = db.customers.filter(c => {
+    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.phone && c.phone.includes(searchTerm)) ||
+      (c.address && c.address.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    if (!matchesSearch) return false;
+
+    if (statusFilter === 'debtors') {
+      return (c.balanceOwed || 0) > 0;
+    }
+    if (statusFilter === 'settled') {
+      return (c.balanceOwed || 0) <= 0;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with Title and Search */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2.5">
@@ -118,7 +134,7 @@ export const CustomersView: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-slate-500">{t.totalSaleAmount || 'مجموع خریدها'}</span>
+            <span className="text-xs font-semibold text-slate-500">{t.totalCustomerPurchases}</span>
             <div className="text-xl font-bold font-mono text-slate-900 mt-1">
               {totalSalesAll.toLocaleString()} {t.currency}
             </div>
@@ -131,11 +147,11 @@ export const CustomersView: React.FC = () => {
 
         <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-slate-500">{t.totalReceived || 'مجموع دریافت نقدی'}</span>
+            <span className="text-xs font-semibold text-slate-500">{t.cashReceived}</span>
             <div className="text-xl font-bold font-mono text-emerald-700 mt-1">
               {totalPaidAll.toLocaleString()} {t.currency}
             </div>
-            <span className="text-xs text-emerald-600">دریافت شده از مشتریان</span>
+            <span className="text-xs text-emerald-600">{t.receivedFromCustomers}</span>
           </div>
           <div className="p-3 bg-emerald-100 text-emerald-700 rounded-xl border border-emerald-200">
             <Wallet className="w-6 h-6" />
@@ -144,12 +160,12 @@ export const CustomersView: React.FC = () => {
 
         <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-slate-500">{t.balanceOwedToCustomer || 'مجموع باقی‌داری مشتریان'}</span>
+            <span className="text-xs font-semibold text-slate-500">{t.balanceOwedToCustomer}</span>
             <div className="text-xl font-bold font-mono text-rose-700 mt-1">
               {totalReceivableDebtAll.toLocaleString()} {t.currency}
             </div>
             <span className="text-xs text-rose-600 font-medium">
-              {debtorCount} فارم / مشتری قرض‌دار
+              {debtorCount} {t.debtorFarmsCount}
             </span>
           </div>
           <div className="p-3 bg-rose-100 text-rose-700 rounded-xl border border-rose-200">
@@ -165,9 +181,9 @@ export const CustomersView: React.FC = () => {
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-blue-600" />
             <h3 className="font-bold text-sm text-slate-900">
-              لیست خطی و جامع حساب مشتریان
+              {t.customersListLinear}
             </h3>
-            <span className="text-xs text-slate-500 font-mono">({filteredCustomers.length} مورد)</span>
+            <span className="text-xs text-slate-500 font-mono">({filteredCustomers.length})</span>
           </div>
 
           {/* Quick Filter Buttons */}
@@ -181,7 +197,7 @@ export const CustomersView: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              همه ({db.customers.length})
+              {t.allUnits} ({db.customers.length})
             </button>
             <button
               type="button"
@@ -192,7 +208,7 @@ export const CustomersView: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              قرض‌داران ({debtorCount})
+              {t.debtors} ({debtorCount})
             </button>
             <button
               type="button"
@@ -203,7 +219,7 @@ export const CustomersView: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              تسویه کامل ({db.customers.length - debtorCount})
+              {t.settled} ({db.customers.length - debtorCount})
             </button>
           </div>
         </div>
@@ -213,13 +229,13 @@ export const CustomersView: React.FC = () => {
           <table className="w-full text-start text-xs sm:text-sm min-w-[850px]">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold text-[11px] uppercase">
               <tr>
-                <th className="py-3.5 px-4 text-start">نام و هویت مشتری</th>
-                <th className="py-3.5 px-4 text-start">اطلاعات تماس و آدرس</th>
-                <th className="py-3.5 px-4 text-start">مجموع خرید</th>
-                <th className="py-3.5 px-4 text-start">پرداخت نقدی</th>
-                <th className="py-3.5 px-4 text-start">باقی‌داری (قرض)</th>
-                <th className="py-3.5 px-4 text-center">تاریخچه تراکنش‌ها</th>
-                <th className="py-3.5 px-4 text-center">عملیات مالی</th>
+                <th className="py-3.5 px-4 text-start">{t.nameAndFarm}</th>
+                <th className="py-3.5 px-4 text-start">{t.contactAndAddress}</th>
+                <th className="py-3.5 px-4 text-start">{t.totalCustomerPurchases}</th>
+                <th className="py-3.5 px-4 text-start">{t.cashPaid}</th>
+                <th className="py-3.5 px-4 text-start">{t.remainingDebt}</th>
+                <th className="py-3.5 px-4 text-center">{t.transactionHistory}</th>
+                <th className="py-3.5 px-4 text-center">{t.financialActions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -238,7 +254,7 @@ export const CustomersView: React.FC = () => {
                             type="button"
                             onClick={() => toggleExpand(cust.id)}
                             className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                            title="باز/بسته کردن تاریخچه تراکنش‌ها"
+                            title={t.toggleHistoryTooltip}
                           >
                             {isExpanded ? <ChevronUp className="w-4 h-4 text-blue-600" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
@@ -247,17 +263,17 @@ export const CustomersView: React.FC = () => {
                               <span>{cust.name}</span>
                               {hasDebt ? (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
-                                  قرض‌دار
+                                  {t.customerDebtBadge}
                                 </span>
                               ) : (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 inline-flex items-center gap-0.5">
                                   <CheckCircle className="w-3 h-3" />
-                                  <span>تسویه</span>
+                                  <span>{t.settledBadge}</span>
                                 </span>
                               )}
                             </div>
                             <span className="text-[10px] text-slate-400 font-mono">
-                              کد شناسایی: #{cust.id.slice(-6).toUpperCase()}
+                              {t.idCode}: #{cust.id.slice(-6).toUpperCase()}
                             </span>
                           </div>
                         </div>
@@ -304,11 +320,11 @@ export const CustomersView: React.FC = () => {
                             <span className="font-mono font-bold text-rose-700 text-sm">
                               {cust.balanceOwed.toLocaleString()} {t.currency}
                             </span>
-                            <span className="text-[10px] text-rose-600 font-medium">نیاز به تسویه</span>
+                            <span className="text-[10px] text-rose-600 font-medium">{t.customerDebtBadge}</span>
                           </div>
                         ) : (
                           <span className="font-mono text-slate-500 text-xs">
-                            ۰ {t.currency}
+                            0 {t.currency}
                           </span>
                         )}
                       </td>
@@ -326,7 +342,7 @@ export const CustomersView: React.FC = () => {
                             }`}
                           >
                             <History className="w-3.5 h-3.5" />
-                            <span>تاریخچه ({transactionsCount})</span>
+                            <span>{t.historyCount} ({transactionsCount})</span>
                             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                           </button>
                         </div>
@@ -349,7 +365,7 @@ export const CustomersView: React.FC = () => {
                             type="button"
                             onClick={() => setSelectedHistoryCustomer(cust)}
                             className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
-                            title="چاپ و صورتحساب رسمی"
+                            title={t.printOfficialStatement}
                           >
                             <Printer className="w-4 h-4" />
                           </button>
@@ -375,7 +391,7 @@ export const CustomersView: React.FC = () => {
                               <div className="flex items-center gap-2">
                                 <History className="w-4 h-4 text-blue-600" />
                                 <span className="font-bold text-xs text-slate-800">
-                                  ریز سوابق و تاریخچه تراکنش‌های {cust.name}
+                                  {t.detailedTransactionRecordFor} {cust.name}
                                 </span>
                               </div>
                               <button
@@ -384,7 +400,7 @@ export const CustomersView: React.FC = () => {
                                 className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
                               >
                                 <Printer className="w-3.5 h-3.5" />
-                                <span>چاپ صورتحساب کامل</span>
+                                <span>{t.printFullStatement}</span>
                               </button>
                             </div>
 
@@ -393,12 +409,12 @@ export const CustomersView: React.FC = () => {
                                 <table className="w-full text-xs text-start">
                                   <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-[10px]">
                                     <tr>
-                                      <th className="py-2 px-3 text-start">تاریخ</th>
-                                      <th className="py-2 px-3 text-start">نوع عملیات</th>
-                                      <th className="py-2 px-3 text-start">توضیحات / قلم معامله</th>
-                                      <th className="py-2 px-3 text-start">مبلغ فاکتور</th>
-                                      <th className="py-2 px-3 text-start">پرداخت نقدی</th>
-                                      <th className="py-2 px-3 text-start">مانده باقی‌داری</th>
+                                      <th className="py-2 px-3 text-start">{t.dateCol}</th>
+                                      <th className="py-2 px-3 text-start">{t.transactionType}</th>
+                                      <th className="py-2 px-3 text-start">{t.descOrGoods}</th>
+                                      <th className="py-2 px-3 text-start">{t.invoiceAmount}</th>
+                                      <th className="py-2 px-3 text-start">{t.paidAmountLabel}</th>
+                                      <th className="py-2 px-3 text-start">{t.remainingDebtBalance}</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-100">
@@ -409,16 +425,18 @@ export const CustomersView: React.FC = () => {
                                           {tr.type === 'sale' ? (
                                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
                                               <Receipt className="w-3 h-3" />
-                                              فروش دانه
+                                              {getLocalizedTxType(tr.type)}
                                             </span>
                                           ) : (
                                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
                                               <ArrowDownLeft className="w-3 h-3" />
-                                              دریافت نقدی
+                                              {getLocalizedTxType(tr.type)}
                                             </span>
                                           )}
                                         </td>
-                                        <td className="py-2.5 px-3 text-slate-700 font-medium">{tr.description}</td>
+                                        <td className="py-2.5 px-3 text-slate-700 font-medium">
+                                          {getLocalizedTxDesc(tr.description)}
+                                        </td>
                                         <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
                                           {tr.amount ? `${tr.amount.toLocaleString()} ${t.currency}` : '-'}
                                         </td>
@@ -435,7 +453,7 @@ export const CustomersView: React.FC = () => {
                               </div>
                             ) : (
                               <div className="p-6 text-center text-slate-400 text-xs">
-                                هنوز هیچ تراکنشی برای این مشتری ثبت نشده است.
+                                {t.noTxRecorded}
                               </div>
                             )}
                           </div>
@@ -450,7 +468,7 @@ export const CustomersView: React.FC = () => {
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-500">
                     <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                    <p className="text-sm font-medium">هیچ مشتری با این مشخصات یافت نشد.</p>
+                    <p className="text-sm font-medium">{t.noCustomerFound}</p>
                   </td>
                 </tr>
               )}
@@ -473,7 +491,7 @@ export const CustomersView: React.FC = () => {
                     {t.receivePayment}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {receiveModalCustomer.name} (باقی‌داری فعلی: {receiveModalCustomer.balanceOwed.toLocaleString()} {t.currency})
+                    {receiveModalCustomer.name} ({t.remainingDebt}: {receiveModalCustomer.balanceOwed.toLocaleString()} {t.currency})
                   </p>
                 </div>
               </div>
@@ -489,7 +507,7 @@ export const CustomersView: React.FC = () => {
             <form onSubmit={handleReceiveSubmit} className="space-y-4 mt-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  مبلغ دریافتی ({t.currency}) *
+                  {t.cashReceived} ({t.currency}) *
                 </label>
                 <div className="relative">
                   <input
@@ -509,13 +527,13 @@ export const CustomersView: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  توضیحات یا نمبر رسید نقدی / بانکی
+                  {t.paymentOrCheckNote}
                 </label>
                 <input
                   type="text"
                   value={paymentNote}
                   onChange={(e) => setPaymentNote(e.target.value)}
-                  placeholder="مثال: دریافت نقدی در دفتر کارخانه"
+                  placeholder={t.paymentFromFactoryVault}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
                 />
               </div>
@@ -551,10 +569,10 @@ export const CustomersView: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">
-                    صورتحساب و تاریخچه حساب ({selectedHistoryCustomer.name})
+                    {t.accountStatementAndHistory} ({selectedHistoryCustomer.name})
                   </h3>
                   <span className="text-[11px] text-slate-500 font-mono">
-                    تماس: {selectedHistoryCustomer.phone || '-'} • باقی‌داری کل: {selectedHistoryCustomer.balanceOwed.toLocaleString()} {t.currency}
+                    {t.phone}: {selectedHistoryCustomer.phone || '-'} • {t.remainingDebt}: {selectedHistoryCustomer.balanceOwed.toLocaleString()} {t.currency}
                   </span>
                 </div>
               </div>
@@ -565,7 +583,7 @@ export const CustomersView: React.FC = () => {
                   className="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold flex items-center gap-1 cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  <span>چاپ</span>
+                  <span>{t.printInvoice}</span>
                 </button>
                 <button
                   type="button"
@@ -583,24 +601,24 @@ export const CustomersView: React.FC = () => {
                   <div key={h.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center text-xs shadow-2xs">
                     <div>
                       <div className="font-mono text-slate-500">{h.date}</div>
-                      <div className="text-slate-800 mt-0.5 font-medium">{h.description}</div>
+                      <div className="text-slate-800 mt-0.5 font-medium">{getLocalizedTxDesc(h.description)}</div>
                       <div className="text-[11px] text-slate-500 mt-0.5">
-                        نوع: {h.type === 'sale' ? 'فاکتور فروش' : 'دریافت نقدی'}
+                        {t.transactionType}: {getLocalizedTxType(h.type)}
                       </div>
                     </div>
                     <div className="text-end">
                       <div className="font-bold font-mono text-emerald-700 text-sm">
-                        پرداخت: {h.paidAmount.toLocaleString()} {t.currency}
+                        {t.cashPaid}: {h.paidAmount.toLocaleString()} {t.currency}
                       </div>
                       <div className="text-[11px] text-rose-700 font-mono mt-0.5">
-                        مانده قرض: {h.remainingAmount.toLocaleString()} {t.currency}
+                        {t.remainingDebt}: {h.remainingAmount.toLocaleString()} {t.currency}
                       </div>
                     </div>
                   </div>
                 ))
               ) : (
                 <div className="p-8 text-center text-slate-500 text-xs">
-                  هیچ تراکنشی در سیستم ثبت نشده است.
+                  {t.noTxRecorded}
                 </div>
               )}
             </div>
@@ -608,7 +626,7 @@ export const CustomersView: React.FC = () => {
             {/* Print Statement Footer with Branding */}
             <div className="p-3 bg-slate-50 border-t border-slate-200 text-center">
               <div className="text-[10px] font-mono text-slate-500">
-                Developed by: rayan-tech-solutions.tech
+                {t.developedBy}
               </div>
             </div>
           </div>

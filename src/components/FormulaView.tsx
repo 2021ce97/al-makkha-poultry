@@ -4,44 +4,51 @@ import {
   Scale, 
   Plus, 
   Trash2, 
-  CheckCircle2, 
-  AlertCircle, 
   PackageCheck, 
+  DollarSign, 
+  AlertCircle, 
+  CheckCircle2, 
+  Layers, 
   CalendarClock, 
-  DollarSign,
-  Layers,
-  Zap,
+  Zap, 
+  Info, 
   ArrowRightLeft,
   ChevronDown,
-  ChevronUp,
-  Sparkles,
-  Info
+  ChevronUp
 } from 'lucide-react';
 
 export const FormulaView: React.FC = () => {
-  const { db, t, lang, createFormulaAndProduce, deleteFormula, getLocalizedName } = useDatabase();
+  const { 
+    db, 
+    t, 
+    lang, 
+    createFormulaAndProduce, 
+    deleteFormula, 
+    getLocalizedName 
+  } = useDatabase();
 
-  // Recipe Builder State
   const [formulaName, setFormulaName] = useState('');
   const [description, setDescription] = useState('');
   const [operatorName, setOperatorName] = useState('');
   const [batchExpenses, setBatchExpenses] = useState<number | ''>('');
-  const [ingredients, setIngredients] = useState<
-    { rawMaterialId: string; weightKg: number }[]
-  >([
+  
+  // Ingredients list in formulation
+  const [ingredients, setIngredients] = useState<{ rawMaterialId: string; weightKg: number }[]>([
     { rawMaterialId: db.rawMaterials[0]?.id || '', weightKg: 500 },
     { rawMaterialId: db.rawMaterials[1]?.id || '', weightKg: 300 },
-    { rawMaterialId: db.rawMaterials[2]?.id || '', weightKg: 100 },
+    { rawMaterialId: db.rawMaterials[2]?.id || '', weightKg: 150 },
+    { rawMaterialId: db.rawMaterials[3]?.id || '', weightKg: 50 },
   ]);
+
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // In-app confirmation modal for deleting formula
+  // In-app delete formula confirmation
   const [formulaToDelete, setFormulaToDelete] = useState<string | null>(null);
 
-  // Unit display preferences for processed feed stock
+  // Multi-unit display toggles: 'all' | 'ton' | 'bag' | 'kg'
   const [stockViewUnit, setStockViewUnit] = useState<'all' | 'ton' | 'bag' | 'kg'>('all');
 
-  // Quick Unit Converter Interactive State
+  // Quick Unit Converter state
   const [showConverter, setShowConverter] = useState(false);
   const [convTons, setConvTons] = useState<number | ''>(1);
   const [convBags, setConvBags] = useState<number | ''>(20);
@@ -139,7 +146,7 @@ export const FormulaView: React.FC = () => {
     });
   };
 
-  // Batch Scaling: Scale current ingredients to exact target Tons (1 Ton = 1000 kg, 2 Tons = 2000 kg, 5 Tons = 5000 kg)
+  // Batch Scaling: Scale current ingredients to exact target Tons
   const handleScaleBatchToTons = (targetTons: number) => {
     if (totalBatchWeight <= 0) return;
     const targetKg = targetTons * 1000;
@@ -183,12 +190,12 @@ export const FormulaView: React.FC = () => {
     setMessage(null);
 
     if (!formulaName.trim()) {
-      setMessage({ type: 'error', text: 'لطفاً نام دانه / فرمول را وارد کنید.' });
+      setMessage({ type: 'error', text: t.pleaseEnterFormulaName });
       return;
     }
 
     if (totalBatchWeight <= 0) {
-      setMessage({ type: 'error', text: 'وزن کل مواد مصرفی باید بیشتر از صفر باشد.' });
+      setMessage({ type: 'error', text: t.totalWeightMustBePositive });
       return;
     }
 
@@ -196,13 +203,13 @@ export const FormulaView: React.FC = () => {
     for (const ing of ingredients) {
       const raw = db.rawMaterials.find(r => r.id === ing.rawMaterialId);
       if (!raw) {
-        setMessage({ type: 'error', text: 'یک ماده خام نامعتبر انتخاب شده است.' });
+        setMessage({ type: 'error', text: t.invalidRawMaterialSelected });
         return;
       }
       if (raw.stockKg < ing.weightKg) {
         setMessage({ 
           type: 'error', 
-          text: `موجودی "${getLocalizedName(raw.name)}" کافی نیست! موجودی انبار: ${raw.stockKg.toLocaleString()} کیلو، مقدار درخواستی: ${ing.weightKg.toLocaleString()} کیلو.` 
+          text: `${t.insufficientStockOfItem} "${getLocalizedName(raw.name)}" - ${raw.stockKg.toLocaleString()} ${t.kilo}, ${t.requestedAmount} ${ing.weightKg.toLocaleString()} ${t.kilo}.` 
         });
         return;
       }
@@ -220,7 +227,7 @@ export const FormulaView: React.FC = () => {
     if (result.success) {
       setMessage({ 
         type: 'success', 
-        text: `پروسس دانه "${formulaName}" با موفقیت انجام شد! ${totalTons.toFixed(2)} تن (${totalBatchWeight.toLocaleString()} کیلو • ${totalBags} بوجی) دانه آماده به انبار پروسس اضافه گردید.` 
+        text: `${t.produceSuccessMsg} (${formulaName}) ${totalTons.toFixed(2)} ${t.tons} (${totalBatchWeight.toLocaleString()} ${t.kilo} • ${totalBags} ${t.bags}) ${t.readyFeedAddedToWarehouse}` 
       });
 
       // Reset form
@@ -229,7 +236,7 @@ export const FormulaView: React.FC = () => {
       setOperatorName('');
       setBatchExpenses('');
     } else {
-      setMessage({ type: 'error', text: result.error || 'خطا در ثبت پروسس دانه' });
+      setMessage({ type: 'error', text: result.error || 'Error' });
     }
   };
 
@@ -252,7 +259,7 @@ export const FormulaView: React.FC = () => {
             <span>{t.formulaTitle}</span>
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 mt-1">
-            {t.formulaDesc} • محاسبه خودکار بر اساس <strong>تن (Tons)</strong>، <strong>بوجی (Bags)</strong> و <strong>کیلو (Kg)</strong>
+            {t.formulaDesc}
           </p>
         </div>
 
@@ -265,34 +272,34 @@ export const FormulaView: React.FC = () => {
             className="px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
           >
             <ArrowRightLeft className="w-3.5 h-3.5 text-amber-700" />
-            <span>{t.unitConverter || 'مبدل سریع تن / بوجی / کیلو'}</span>
+            <span>{t.unitConverter}</span>
             {showConverter ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
 
           <div className="h-5 w-px bg-slate-200 hidden sm:block"></div>
 
           {/* Quick Formula Presets */}
-          <span className="text-xs font-semibold text-slate-500 hidden md:inline">پیش‌فرض‌ها:</span>
+          <span className="text-xs font-semibold text-slate-500 hidden md:inline">{t.factoryPresets}</span>
           <button
             type="button"
             onClick={() => applyTemplate('starter')}
             className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
           >
-            استارتر (۲۲٪)
+            {t.starter22}
           </button>
           <button
             type="button"
             onClick={() => applyTemplate('grower')}
             className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
           >
-            گروور (۲۰٪)
+            {t.grower20}
           </button>
           <button
             type="button"
             onClick={() => applyTemplate('layer')}
             className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
           >
-            مرغ تخمی
+            {t.layerHen}
           </button>
         </div>
       </div>
@@ -306,11 +313,11 @@ export const FormulaView: React.FC = () => {
                 <ArrowRightLeft className="w-4 h-4" />
               </div>
               <h4 className="font-bold text-sm text-amber-950">
-                سیستم تبدیل سریع و دقیق واحدهای دانه
+                {t.unitConverterTitle}
               </h4>
             </div>
             <div className="text-[11px] font-mono font-medium text-amber-800 bg-amber-100/80 px-2.5 py-1 rounded-lg border border-amber-200">
-              قاعده استاندارد: ۱ تن (Metric Ton) = ۲۰ بوجی (۵۰ کیلویی) = ۱,۰۰۰ کیلوگرم
+              {t.standardConversionRule}
             </div>
           </div>
 
@@ -318,7 +325,7 @@ export const FormulaView: React.FC = () => {
             {/* Tons Input */}
             <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-2xs">
               <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                <span>مقدار به تن (Metric Ton)</span>
+                <span>{t.amountInTons}</span>
                 <span className="text-[10px] text-amber-600 font-mono">1 Ton = 1000 Kg</span>
               </label>
               <div className="relative">
@@ -331,14 +338,14 @@ export const FormulaView: React.FC = () => {
                   placeholder="1"
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-base font-bold font-mono text-slate-900 focus:outline-none focus:border-amber-600"
                 />
-                <span className="absolute end-3 top-2.5 text-xs font-bold text-slate-400">تن</span>
+                <span className="absolute end-3 top-2.5 text-xs font-bold text-slate-400">{t.tons}</span>
               </div>
             </div>
 
             {/* Bags Input */}
             <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-2xs">
               <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                <span>مقدار به بوجی (Bag - 50kg)</span>
+                <span>{t.amountInBags}</span>
                 <span className="text-[10px] text-amber-600 font-mono">1 Bag = 50 Kg</span>
               </label>
               <div className="relative">
@@ -351,14 +358,14 @@ export const FormulaView: React.FC = () => {
                   placeholder="20"
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-base font-bold font-mono text-slate-900 focus:outline-none focus:border-amber-600"
                 />
-                <span className="absolute end-3 top-2.5 text-xs font-bold text-slate-400">بوجی</span>
+                <span className="absolute end-3 top-2.5 text-xs font-bold text-slate-400">{t.bags}</span>
               </div>
             </div>
 
             {/* Kg Input */}
             <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-2xs">
               <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                <span>مقدار به کیلوگرم (Kg)</span>
+                <span>{t.amountInKg}</span>
                 <span className="text-[10px] text-amber-600 font-mono">Standard Weight</span>
               </label>
               <div className="relative">
@@ -371,7 +378,7 @@ export const FormulaView: React.FC = () => {
                   placeholder="1000"
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-base font-bold font-mono text-slate-900 focus:outline-none focus:border-amber-600"
                 />
-                <span className="absolute end-3 top-2.5 text-xs font-bold text-slate-400">کیلو</span>
+                <span className="absolute end-3 top-2.5 text-xs font-bold text-slate-400">{t.kilos}</span>
               </div>
             </div>
           </div>
@@ -403,35 +410,32 @@ export const FormulaView: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Scale className="w-5 h-5 text-amber-600" />
-              <span>ترکیب و فرمولاسیون خط تولید دانه</span>
+              <span>{t.recipeBuilderTitle}</span>
             </h3>
 
             {/* Scale Batch to Exact Tons Shortcuts */}
             <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl text-xs">
-              <span className="text-[11px] text-slate-500 font-semibold">تنظیم خودکار بچ به:</span>
+              <span className="text-[11px] text-slate-500 font-semibold">{t.scaleBatchTo}</span>
               <button
                 type="button"
                 onClick={() => handleScaleBatchToTons(1)}
                 className="px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-amber-500 text-slate-700 hover:text-amber-700 font-bold transition-all cursor-pointer shadow-2xs"
-                title="تنظیم دقیق مواد به ۱ تن (1000 کیلو)"
               >
-                ۱ تن
+                {t.ton1}
               </button>
               <button
                 type="button"
                 onClick={() => handleScaleBatchToTons(2)}
                 className="px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-amber-500 text-slate-700 hover:text-amber-700 font-bold transition-all cursor-pointer shadow-2xs"
-                title="تنظیم دقیق مواد به ۲ تن (2000 کیلو)"
               >
-                ۲ تن
+                {t.ton2}
               </button>
               <button
                 type="button"
                 onClick={() => handleScaleBatchToTons(5)}
                 className="px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-amber-500 text-slate-700 hover:text-amber-700 font-bold transition-all cursor-pointer shadow-2xs"
-                title="تنظیم دقیق مواد به ۵ تن (5000 کیلو)"
               >
-                ۵ تن
+                {t.ton5}
               </button>
             </div>
           </div>
@@ -440,27 +444,27 @@ export const FormulaView: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  نام دانه / فورمول *
+                  {t.formulaNameLabel}
                 </label>
                 <input
                   type="text"
                   required
                   value={formulaName}
                   onChange={(e) => setFormulaName(e.target.value)}
-                  placeholder="مثال: دانه رشد برویلر (گروور)"
+                  placeholder={t.formulaNamePlaceholder}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  نام اپراتور / مسئول دستگاه
+                  {t.operatorNameLabel}
                 </label>
                 <input
                   type="text"
                   value={operatorName}
                   onChange={(e) => setOperatorName(e.target.value)}
-                  placeholder="نام مسئول خط تولید..."
+                  placeholder={t.operatorPlaceholder}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
                 />
               </div>
@@ -469,13 +473,13 @@ export const FormulaView: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  توضیحات فرمول
+                  {t.formulaDescriptionLabel}
                 </label>
                 <input
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="مثال: فرمول استاندارد با ارزش پروتئین بالا"
+                  placeholder={t.formulaDescPlaceholder}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
                 />
               </div>
@@ -502,7 +506,7 @@ export const FormulaView: React.FC = () => {
             <div className="mt-5 space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  اقلام مواد خام مصرفی در این بچ
+                  {t.rawItemsInBatch}
                 </label>
                 <button
                   type="button"
@@ -510,7 +514,7 @@ export const FormulaView: React.FC = () => {
                   className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>افزودن ماده خام</span>
+                  <span>{t.addRawIngredient}</span>
                 </button>
               </div>
 
@@ -528,7 +532,7 @@ export const FormulaView: React.FC = () => {
                       }`}
                     >
                       <div className="flex-1 min-w-0">
-                        <label className="block text-[10px] text-slate-500 mb-1">انتخاب ماده خام #{idx + 1}</label>
+                        <label className="block text-[10px] text-slate-500 mb-1">{t.selectRawIndex} #{idx + 1}</label>
                         <select
                           value={ing.rawMaterialId}
                           onChange={(e) => handleUpdateIngredient(idx, 'rawMaterialId', e.target.value)}
@@ -536,14 +540,14 @@ export const FormulaView: React.FC = () => {
                         >
                           {db.rawMaterials.map(rm => (
                             <option key={rm.id} value={rm.id}>
-                              {getLocalizedName(rm.name)} (موجودی: {(rm.stockKg / 1000).toFixed(2)} تن / {rm.stockKg.toLocaleString()} کیلو • {rm.unitPrice} {t.currency}/kg)
+                              {getLocalizedName(rm.name)} ({t.currentStockLabel}: {(rm.stockKg / 1000).toFixed(2)} {t.tons} / {rm.stockKg.toLocaleString()} {t.kilo} • {rm.unitPrice} {t.currency}/kg)
                             </option>
                           ))}
                         </select>
                       </div>
 
                       <div className="w-full sm:w-36">
-                        <label className="block text-[10px] text-slate-500 mb-1">وزن (کیلوگرم)</label>
+                        <label className="block text-[10px] text-slate-500 mb-1">{t.weightKgLabel}</label>
                         <input
                           type="number"
                           min="1"
@@ -555,7 +559,7 @@ export const FormulaView: React.FC = () => {
                       </div>
 
                       <div className="w-full sm:w-32 text-end sm:pt-4">
-                        <span className="text-[10px] text-slate-500 block">هزینه کل</span>
+                        <span className="text-[10px] text-slate-500 block">{t.itemCostTotal}</span>
                         <span className="text-xs font-bold text-amber-700 font-mono">
                           {cost.toLocaleString()} {t.currency}
                         </span>
@@ -582,7 +586,7 @@ export const FormulaView: React.FC = () => {
                 className="px-6 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-md shadow-amber-600/25 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
               >
                 <PackageCheck className="w-4 h-4" />
-                <span>ثبت پروسس و تولید دانه</span>
+                <span>{t.produceFeedBtn}</span>
               </button>
             </div>
           </form>
@@ -593,16 +597,16 @@ export const FormulaView: React.FC = () => {
           <div>
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 pb-3 border-b border-slate-100">
               <DollarSign className="w-4 h-4 text-emerald-600" />
-              <span>محاسبه خودکار وزن و قیمت تمام‌شد (به تن)</span>
+              <span>{t.autoCostCalcTon}</span>
             </h3>
 
             <div className="space-y-3 mt-4">
               {/* Total Weight in Tons & Kilo */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <span className="text-xs text-slate-500 block">{t.totalFormulaWeight} (محاسبه به تن و کیلو):</span>
+                <span className="text-xs text-slate-500 block">{t.totalFormulaWeight}:</span>
                 <div className="text-2xl font-black font-mono text-slate-900 mt-1 flex items-baseline gap-2">
                   <span>{totalTons.toFixed(3)}</span>
-                  <span className="text-sm font-bold text-amber-700">تن (Metric Ton)</span>
+                  <span className="text-sm font-bold text-amber-700">{t.tons}</span>
                 </div>
                 <div className="text-xs text-slate-600 mt-1.5 font-mono font-medium flex items-center gap-2 pt-1 border-t border-slate-200">
                   <span className="bg-slate-200/80 px-2 py-0.5 rounded text-slate-800 font-bold">
@@ -610,7 +614,7 @@ export const FormulaView: React.FC = () => {
                   </span>
                   <span>•</span>
                   <span className="bg-amber-100 px-2 py-0.5 rounded text-amber-800 font-bold">
-                    {totalBags.toLocaleString()} {t.bag}
+                    {totalBags.toLocaleString()} {t.bags}
                   </span>
                 </div>
               </div>
@@ -618,12 +622,12 @@ export const FormulaView: React.FC = () => {
               {/* Raw Material Cost & Batch Expenses */}
               <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
                 <div className="flex justify-between items-center text-slate-600">
-                  <span>هزینه مواد خام:</span>
+                  <span>{t.rawMaterialsCost}</span>
                   <span className="font-mono font-bold">{totalRawMaterialCost.toLocaleString()} {t.currency}</span>
                 </div>
                 {batchExpenseAmount > 0 && (
                   <div className="flex justify-between items-center text-amber-700 mt-1.5 pt-1.5 border-t border-slate-200">
-                    <span>مصارف تولید (برق/سوخت/کارگر):</span>
+                    <span>{t.prodExpensesSub}</span>
                     <span className="font-mono font-bold">+{batchExpenseAmount.toLocaleString()} {t.currency}</span>
                   </div>
                 )}
@@ -637,23 +641,23 @@ export const FormulaView: React.FC = () => {
               <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 space-y-2">
                 <div>
                   <span className="text-xs font-semibold text-emerald-800 block">
-                    {t.costPerTonResult || 'قیمت تمام‌شد فی تن (۲۰ بوجی)'}:
+                    {t.costPerTonResult}:
                   </span>
                   <div className="text-2xl font-black font-mono text-emerald-800 mt-0.5">
                     {costPerTon.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })} {t.currency}
-                    <span className="text-xs font-medium text-emerald-700 ms-1">/ تن</span>
+                    <span className="text-xs font-medium text-emerald-700 ms-1">/ {t.tons}</span>
                   </div>
                 </div>
 
                 <div className="pt-2 border-t border-emerald-200 grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-[10px] text-emerald-700 block">فی بوجی (۵۰kg):</span>
+                    <span className="text-[10px] text-emerald-700 block">{t.costPerBag50kg}</span>
                     <strong className="font-mono text-emerald-900 text-sm">
                       {costPerBag.toFixed(0)} {t.currency}
                     </strong>
                   </div>
                   <div>
-                    <span className="text-[10px] text-emerald-700 block">فی کیلوگرم (kg):</span>
+                    <span className="text-[10px] text-emerald-700 block">{t.costPerKgShort}</span>
                     <strong className="font-mono text-emerald-900 text-sm">
                       {costPerKg.toFixed(2)} {t.currency}
                     </strong>
@@ -666,7 +670,7 @@ export const FormulaView: React.FC = () => {
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 flex items-start gap-2">
             <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <span>
-              نرخ تمام‌شد به ازای هر تن و هر کیلوگرم به انبار دانه پروسس شده منتقل شده و در صفحه فروشات برای محاسبه سود واقعی هر تن و بوجی اعمال می‌گردد.
+              {t.costTransferNotice}
             </span>
           </div>
         </div>
@@ -682,10 +686,10 @@ export const FormulaView: React.FC = () => {
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                موجودی دانه پروسس شده در انبار (آماده فروش به تن)
+                {t.processedStockTitleTons}
               </h3>
               <p className="text-xs text-slate-500">
-                اقلام دانه تولید شده با امکان مشاهده دقیق به تن، بوجی و کیلو
+                {t.processedStockSubtitle}
               </p>
             </div>
           </div>
@@ -701,7 +705,7 @@ export const FormulaView: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              {t.allUnits || 'همه واحدها'}
+              {t.allUnits}
             </button>
             <button
               type="button"
@@ -712,7 +716,7 @@ export const FormulaView: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              به تن (Tons)
+              {t.inTons}
             </button>
             <button
               type="button"
@@ -723,7 +727,7 @@ export const FormulaView: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              به بوجی (Bags)
+              {t.inBags}
             </button>
             <button
               type="button"
@@ -734,7 +738,7 @@ export const FormulaView: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              به کیلو (Kg)
+              {t.inKg}
             </button>
           </div>
         </div>
@@ -742,35 +746,35 @@ export const FormulaView: React.FC = () => {
         {/* Global Processed Stock Overview Banners */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200">
-            <span className="text-[11px] font-semibold text-amber-800 block">مجموع موجودی به تن</span>
+            <span className="text-[11px] font-semibold text-amber-800 block">{t.totalStockInTons}</span>
             <div className="text-xl font-bold font-mono text-amber-900 mt-1">
-              {totalProcessedTons.toFixed(2)} تن
+              {totalProcessedTons.toFixed(2)} {t.tons}
             </div>
-            <span className="text-[10px] text-amber-700">معادل Metric Ton</span>
+            <span className="text-[10px] text-amber-700">{t.equivalentMetricTon}</span>
           </div>
 
           <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-            <span className="text-[11px] font-semibold text-slate-600 block">مجموع به بوجی (۵۰kg)</span>
+            <span className="text-[11px] font-semibold text-slate-600 block">{t.totalInBags50kg}</span>
             <div className="text-xl font-bold font-mono text-slate-900 mt-1">
-              {totalProcessedBags.toLocaleString()} بوجی
+              {totalProcessedBags.toLocaleString()} {t.bags}
             </div>
-            <span className="text-[10px] text-slate-500">هر ۲۰ بوجی = ۱ تن</span>
+            <span className="text-[10px] text-slate-500">{t.bagsPerTonRule}</span>
           </div>
 
           <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-            <span className="text-[11px] font-semibold text-slate-600 block">مجموع به کیلوگرم</span>
+            <span className="text-[11px] font-semibold text-slate-600 block">{t.totalInKg}</span>
             <div className="text-xl font-bold font-mono text-slate-900 mt-1">
-              {totalProcessedKg.toLocaleString()} کیلو
+              {totalProcessedKg.toLocaleString()} {t.kilos}
             </div>
-            <span className="text-[10px] text-slate-500">وزن کل انبار</span>
+            <span className="text-[10px] text-slate-500">{t.totalWarehouseWeight}</span>
           </div>
 
           <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200">
-            <span className="text-[11px] font-semibold text-emerald-800 block">ارزش کل دانه پروسس شده</span>
+            <span className="text-[11px] font-semibold text-emerald-800 block">{t.totalProcessedStockValue}</span>
             <div className="text-xl font-bold font-mono text-emerald-900 mt-1">
               {totalProcessedValue.toLocaleString()} {t.currency}
             </div>
-            <span className="text-[10px] text-emerald-700">{db.processedStock.length} نوع دانه آماده</span>
+            <span className="text-[10px] text-emerald-700">{db.processedStock.length} {t.readyFeedTypes}</span>
           </div>
         </div>
 
@@ -793,7 +797,7 @@ export const FormulaView: React.FC = () => {
                       {getLocalizedName(p.name)}
                     </h4>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                      {tons.toFixed(2)} تن
+                      {tons.toFixed(2)} {t.tons}
                     </span>
                   </div>
 
@@ -801,36 +805,36 @@ export const FormulaView: React.FC = () => {
                   <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5">
                     {stockViewUnit === 'ton' && (
                       <div>
-                        <span className="text-[10px] text-slate-500 block">موجودی انبار (تن):</span>
+                        <span className="text-[10px] text-slate-500 block">{t.processedStockInTons}:</span>
                         <div className="text-2xl font-black font-mono text-amber-800">
-                          {tons.toFixed(2)} <span className="text-xs font-semibold">تن (Tons)</span>
+                          {tons.toFixed(2)} <span className="text-xs font-semibold">{t.tons}</span>
                         </div>
                         <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          معادل {bags.toLocaleString()} بوجی • {p.stockKg.toLocaleString()} کیلو
+                          {t.equivalentTonRate} {bags.toLocaleString()} {t.bags} • {p.stockKg.toLocaleString()} {t.kilo}
                         </div>
                       </div>
                     )}
 
                     {stockViewUnit === 'bag' && (
                       <div>
-                        <span className="text-[10px] text-slate-500 block">موجودی انبار (بوجی):</span>
+                        <span className="text-[10px] text-slate-500 block">{t.inBags}:</span>
                         <div className="text-2xl font-black font-mono text-slate-900">
-                          {bags.toLocaleString()} <span className="text-xs font-semibold">بوجی (۵۰kg)</span>
+                          {bags.toLocaleString()} <span className="text-xs font-semibold">{t.bags}</span>
                         </div>
                         <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          معادل {tons.toFixed(2)} تن • {p.stockKg.toLocaleString()} کیلو
+                          {t.equivalentTonRate} {tons.toFixed(2)} {t.tons} • {p.stockKg.toLocaleString()} {t.kilo}
                         </div>
                       </div>
                     )}
 
                     {stockViewUnit === 'kg' && (
                       <div>
-                        <span className="text-[10px] text-slate-500 block">موجودی انبار (کیلو):</span>
+                        <span className="text-[10px] text-slate-500 block">{t.inKg}:</span>
                         <div className="text-2xl font-black font-mono text-slate-900">
-                          {p.stockKg.toLocaleString()} <span className="text-xs font-semibold">کیلوگرم</span>
+                          {p.stockKg.toLocaleString()} <span className="text-xs font-semibold">{t.kilos}</span>
                         </div>
                         <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          معادل {tons.toFixed(2)} تن • {bags.toLocaleString()} بوجی
+                          {t.equivalentTonRate} {tons.toFixed(2)} {t.tons} • {bags.toLocaleString()} {t.bags}
                         </div>
                       </div>
                     )}
@@ -838,15 +842,15 @@ export const FormulaView: React.FC = () => {
                     {stockViewUnit === 'all' && (
                       <div className="grid grid-cols-3 gap-2 text-center">
                         <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
-                          <span className="text-[10px] text-amber-800 block font-semibold">به تن</span>
+                          <span className="text-[10px] text-amber-800 block font-semibold">{t.inTons}</span>
                           <span className="font-bold font-mono text-amber-900 text-sm">{tons.toFixed(2)}</span>
                         </div>
                         <div className="p-2 rounded-lg bg-white border border-slate-200">
-                          <span className="text-[10px] text-slate-500 block font-semibold">به بوجی</span>
+                          <span className="text-[10px] text-slate-500 block font-semibold">{t.inBags}</span>
                           <span className="font-bold font-mono text-slate-900 text-sm">{bags.toLocaleString()}</span>
                         </div>
                         <div className="p-2 rounded-lg bg-white border border-slate-200">
-                          <span className="text-[10px] text-slate-500 block font-semibold">به کیلو</span>
+                          <span className="text-[10px] text-slate-500 block font-semibold">{t.inKg}</span>
                           <span className="font-bold font-mono text-slate-900 text-sm">{p.stockKg.toLocaleString()}</span>
                         </div>
                       </div>
@@ -856,19 +860,19 @@ export const FormulaView: React.FC = () => {
                   {/* Production Cost Rates Breakdown */}
                   <div className="mt-3 pt-2 border-t border-slate-100 text-xs space-y-1">
                     <div className="flex justify-between items-center text-slate-600">
-                      <span className="font-medium">نرخ تمام‌شد فی تن:</span>
+                      <span className="font-medium">{t.costPerTon}:</span>
                       <span className="font-mono font-bold text-amber-800">
                         {ratePerTon.toLocaleString(undefined, { maximumFractionDigits: 1 })} {t.currency}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-slate-600">
-                      <span className="font-medium">نرخ تمام‌شد فی بوجی:</span>
+                      <span className="font-medium">{t.costPerBag50kg}</span>
                       <span className="font-mono font-bold text-slate-800">
                         {ratePerBag.toFixed(0)} {t.currency}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-slate-600">
-                      <span className="font-medium">نرخ تمام‌شد فی کیلو:</span>
+                      <span className="font-medium">{t.costPerKgShort}</span>
                       <span className="font-mono font-bold text-slate-800">
                         {p.averageCostPerKg.toFixed(2)} {t.currency}
                       </span>
@@ -877,7 +881,7 @@ export const FormulaView: React.FC = () => {
                 </div>
 
                 <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                  <span>آخرین بروزرسانی: {p.lastUpdated}</span>
+                  <span>{t.date}: {p.lastUpdated}</span>
                   <span className="font-mono">ID: {p.id.slice(-6)}</span>
                 </div>
               </div>
@@ -890,11 +894,11 @@ export const FormulaView: React.FC = () => {
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-4">
           <Layers className="w-4 h-4 text-amber-600" />
-          <span>فرمول‌های ذخیره شده در سیستم (با مشخصات وزن به تن و کیلو)</span>
+          <span>{t.savedFormulasWithTons}</span>
         </h3>
 
         {db.formulas.length === 0 ? (
-          <p className="text-xs text-slate-500 p-4 text-center">هنوز فرمولی در سیستم ثبت نشده است.</p>
+          <p className="text-xs text-slate-500 p-4 text-center">{t.noFormulaRegistered}</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {db.formulas.map(f => {
@@ -925,25 +929,25 @@ export const FormulaView: React.FC = () => {
                     )}
                     <div className="mt-3 pt-2 border-t border-slate-200/60 space-y-1.5 text-xs">
                       <div className="flex justify-between text-slate-600">
-                        <span>وزن کل فرمول:</span>
+                        <span>{t.totalFormulaWeight}:</span>
                         <span className="font-mono font-bold text-slate-800">
-                          {formulaTons.toFixed(2)} تن ({f.totalWeightKg.toLocaleString()} kg • {formulaBags} بوجی)
+                          {formulaTons.toFixed(2)} {t.tons} ({f.totalWeightKg.toLocaleString()} kg • {formulaBags} {t.bags})
                         </span>
                       </div>
                       <div className="flex justify-between text-slate-600">
-                        <span>نرخ تمام‌شد فی تن:</span>
+                        <span>{t.costPerTon}:</span>
                         <span className="font-mono font-bold text-emerald-700">
                           {costTon.toLocaleString(undefined, { maximumFractionDigits: 1 })} {t.currency}
                         </span>
                       </div>
                       <div className="flex justify-between text-slate-600">
-                        <span>نرخ تمام‌شد فی بوجی / کیلو:</span>
+                        <span>{t.costPerBag50kg} / {t.costPerKgShort}</span>
                         <span className="font-mono font-semibold text-slate-700">
                           {costBag.toFixed(0)} / {f.costPerKg.toFixed(2)} {t.currency}
                         </span>
                       </div>
                       <div className="flex justify-between text-slate-600">
-                        <span>مجموع هزینه بچ:</span>
+                        <span>{t.totalBatchCost}:</span>
                         <span className="font-mono font-bold text-slate-800">
                           {f.totalBatchCost.toLocaleString()} {t.currency}
                         </span>
@@ -952,7 +956,7 @@ export const FormulaView: React.FC = () => {
                   </div>
 
                   <div className="mt-3 pt-2 border-t border-slate-200 text-[11px] text-slate-400">
-                    تاریخ ایجاد: {f.createdDate}
+                    {t.date}: {f.createdDate}
                   </div>
                 </div>
               );
@@ -965,7 +969,7 @@ export const FormulaView: React.FC = () => {
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-3">
           <CalendarClock className="w-4 h-4 text-amber-600" />
-          <span>تاریخچه خط تولید و پروسس روزانه (بر حسب تن، بوجی و کیلو)</span>
+          <span>{t.productionHistoryTons}</span>
         </h3>
 
         <div className="space-y-2.5">
@@ -981,15 +985,15 @@ export const FormulaView: React.FC = () => {
                 <div>
                   <h4 className="font-bold text-slate-900">{getLocalizedName(b.formulaName)}</h4>
                   <span className="text-[11px] text-slate-500">
-                    تاریخ: {b.date} {b.operatorName ? `• اپراتور: ${b.operatorName}` : ''}
+                    {t.date}: {b.date} {b.operatorName ? `• ${t.operatorNameLabel}: ${b.operatorName}` : ''}
                   </span>
                 </div>
                 <div className="text-end">
                   <span className="font-bold font-mono text-slate-900 text-sm block">
-                    {batchTons.toFixed(2)} تن (Tons)
+                    {batchTons.toFixed(2)} {t.tons}
                   </span>
                   <span className="text-[11px] text-slate-500 font-mono">
-                    {batchBags} بوجی • {b.totalWeightKg.toLocaleString()} {t.kilo}
+                    {batchBags} {t.bags} • {b.totalWeightKg.toLocaleString()} {t.kilo}
                   </span>
                 </div>
               </div>
@@ -1017,14 +1021,14 @@ export const FormulaView: React.FC = () => {
                 onClick={() => setFormulaToDelete(null)}
                 className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                انصراف (Cancel)
+                {t.cancelBtn}
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDeleteFormula}
                 className="flex-1 py-2.5 rounded-xl bg-rose-600 text-xs font-bold text-white hover:bg-rose-700 transition-colors cursor-pointer"
               >
-                حذف فرمول
+                {t.deleteFormulaConfirmBtn}
               </button>
             </div>
           </div>

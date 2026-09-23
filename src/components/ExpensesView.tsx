@@ -170,20 +170,20 @@ export const ExpensesView: React.FC = () => {
           <button
             type="button"
             onClick={() => setSelectedCategoryFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               selectedCategoryFilter === 'all' 
                 ? 'bg-amber-600 text-white shadow-xs' 
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            همه دسته‌ها
+            {t.allCategories}
           </button>
           {Object.entries(categoryConfig).map(([key, cfg]) => (
             <button
               key={key}
               type="button"
               onClick={() => setSelectedCategoryFilter(key)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 selectedCategoryFilter === key 
                   ? 'bg-amber-600 text-white shadow-xs' 
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -213,7 +213,7 @@ export const ExpensesView: React.FC = () => {
                 <th className="py-3 px-4 text-start">{t.expenseDescription}</th>
                 <th className="py-3 px-4 text-start">{t.expenseAmount}</th>
                 <th className="py-3 px-4 text-start">{t.expensePaidBy}</th>
-                <th className="py-3 px-4 text-start">تاریخ</th>
+                <th className="py-3 px-4 text-start">{t.date}</th>
                 <th className="py-3 px-4 text-center">{t.action}</th>
               </tr>
             </thead>
@@ -259,7 +259,7 @@ export const ExpensesView: React.FC = () => {
               {filteredExpenses.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-500">
-                    هیچ مصروفیتی ثبت نشده است.
+                    {t.noExpensesRecorded}
                   </td>
                 </tr>
               )}
@@ -268,7 +268,7 @@ export const ExpensesView: React.FC = () => {
         </div>
       </div>
 
-      {/* Record Expense Modal (Light Theme) */}
+      {/* Record Expense Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl p-6 relative text-slate-900">
@@ -285,7 +285,7 @@ export const ExpensesView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -306,7 +306,7 @@ export const ExpensesView: React.FC = () => {
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 font-medium focus:outline-none focus:border-amber-600 shadow-2xs"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 font-medium focus:outline-none focus:border-amber-600 shadow-2xs cursor-pointer"
                 >
                   {Object.entries(categoryConfig).map(([key, cfg]) => (
                     <option key={key} value={key}>{cfg.name}</option>
@@ -325,7 +325,7 @@ export const ExpensesView: React.FC = () => {
                   required
                   value={amount}
                   onChange={(e) => setAmount(e.target.value ? Number(e.target.value) : '')}
-                  placeholder="مثال: 5000"
+                  placeholder="5000"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
                 />
               </div>
@@ -339,7 +339,7 @@ export const ExpensesView: React.FC = () => {
                   required
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="مثال: خرید تیل دیزل برای جنراتور"
+                  placeholder={t.expenseDescPlaceholder}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
                 />
               </div>
@@ -352,20 +352,20 @@ export const ExpensesView: React.FC = () => {
                   type="text"
                   value={paidBy}
                   onChange={(e) => setPaidBy(e.target.value)}
-                  placeholder="مثال: احمد (صندوق‌دار)"
+                  placeholder={t.expensePaidByPlaceholder}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  یادداشت اضافی
+                  {t.additionalNote}
                 </label>
                 <textarea
                   rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="توضیحات تکمیلی..."
+                  placeholder={t.additionalNotePlaceholder}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
                 />
               </div>
@@ -374,13 +374,13 @@ export const ExpensesView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold"
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md shadow-amber-600/25"
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md shadow-amber-600/25 cursor-pointer"
                 >
                   {t.save}
                 </button>

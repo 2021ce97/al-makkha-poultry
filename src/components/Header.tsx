@@ -67,9 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </h1>
               </div>
               <p className="text-xs text-stone-500 line-clamp-1 font-normal">
-                {lang === 'fa' && 'ماهر شرکت تولیدی دانه مرغ | Mahir Poultry Feed Factory'}
-                {lang === 'ps' && 'ماهر د چرګانو دانې تولیدي شرکت | Mahir Poultry Feed Factory'}
-                {lang === 'en' && 'Mahir Chicken Feed Manufacturing Co. | ماهر شرکت تولیدی دانه مرغ'}
+                {t.companySubtitle}
               </p>
             </div>
           </div>

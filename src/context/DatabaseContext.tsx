@@ -14,7 +14,13 @@ import {
   AuthUser
 } from '../types';
 import { initialFactoryData } from '../initialData';
-import { translations, getLocalizedItemName, getLocalizedCategory } from '../translations';
+import { 
+  translations, 
+  getLocalizedItemName, 
+  getLocalizedCategory,
+  getLocalizedTransactionType,
+  getLocalizedTransactionDescription 
+} from '../translations';
 import { supabase } from '../lib/supabase';
 import { 
   loadStateFromSupabase, 
@@ -54,6 +60,8 @@ interface DatabaseContextType {
   // Localization helpers
   getLocalizedName: (name: string) => string;
   getLocalizedCat: (cat: string) => string;
+  getLocalizedTxType: (type: string) => string;
+  getLocalizedTxDesc: (desc: string) => string;
   isSupabaseConnected: boolean;
   // Inventory & Suppliers
   addRawMaterial: (
@@ -871,6 +879,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const getLocalizedName = (name: string) => getLocalizedItemName(name, lang);
   const getLocalizedCat = (cat: string) => getLocalizedCategory(cat, lang);
+  const getLocalizedTxType = (type: string) => getLocalizedTransactionType(type, lang);
+  const getLocalizedTxDesc = (desc: string) => getLocalizedTransactionDescription(desc, lang);
 
   return (
     <DatabaseContext.Provider
@@ -888,6 +898,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         lowStockMaterials,
         getLocalizedName,
         getLocalizedCat,
+        getLocalizedTxType,
+        getLocalizedTxDesc,
         isSupabaseConnected,
         addRawMaterial,
         deleteRawMaterial,

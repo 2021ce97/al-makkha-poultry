@@ -179,7 +179,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!isCollapsed && (
             <div className="flex items-center gap-1.5 ps-1.5 text-xs text-slate-500 font-medium">
               <Globe2 className="w-3.5 h-3.5" />
-              <span>{t.dir === 'rtl' ? 'زبان:' : 'Lang:'}</span>
+              <span>{t.languageLabel}</span>
             </div>
           )}
           <div className="flex items-center gap-1">

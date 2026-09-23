@@ -2,23 +2,19 @@ import React, { useState } from 'react';
 import { useDatabase } from '../context/DatabaseContext';
 import { 
   FileSpreadsheet, 
-  Calendar, 
   Printer, 
   Download, 
   Upload, 
   RotateCcw, 
-  TrendingUp, 
   PackageCheck, 
-  Receipt, 
   Scale, 
-  DollarSign,
   Wheat,
   CheckCircle2,
   FileText
 } from 'lucide-react';
 
 export const ReportsView: React.FC = () => {
-  const { db, t, lang, exportDatabase, importDatabase, resetToDefaultData, getLocalizedName } = useDatabase();
+  const { db, t, exportDatabase, importDatabase, resetToDefaultData } = useDatabase();
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('daily');
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -68,15 +64,24 @@ export const ReportsView: React.FC = () => {
       if (content) {
         const success = importDatabase(content);
         if (success) {
-          setImportStatus('دیتابیس با موفقیت بارگذاری و بازیابی شد.');
+          setImportStatus(t.dbRestoreSuccess);
           setTimeout(() => setImportStatus(null), 4000);
         } else {
-          setImportStatus('خطا در بارگذاری فایل دیتابیس.');
+          setImportStatus(t.dbRestoreError);
           setTimeout(() => setImportStatus(null), 4000);
         }
       }
     };
     reader.readAsText(file);
+  };
+
+  const getPeriodLabel = (p: 'daily' | 'weekly' | 'monthly' | 'all') => {
+    switch (p) {
+      case 'daily': return t.todayFilter;
+      case 'weekly': return t.lastWeekFilter;
+      case 'monthly': return t.lastMonthFilter;
+      case 'all': return t.all;
+    }
   };
 
   return (
@@ -103,13 +108,13 @@ export const ReportsView: React.FC = () => {
                 key={p}
                 type="button"
                 onClick={() => setPeriod(p)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   period === p 
                     ? 'bg-amber-600 text-white shadow-xs' 
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {p === 'daily' ? 'امروز' : p === 'weekly' ? 'هفته گذشته' : p === 'monthly' ? 'ماه گذشته' : 'همه'}
+                {getPeriodLabel(p)}
               </button>
             ))}
           </div>
@@ -117,10 +122,10 @@ export const ReportsView: React.FC = () => {
           <button
             type="button"
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/25 transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/25 transition-all cursor-pointer"
           >
             <Printer className="w-4 h-4" />
-            <span>چاپ گزارش</span>
+            <span>{t.printReport}</span>
           </button>
         </div>
       </div>
@@ -138,41 +143,47 @@ export const ReportsView: React.FC = () => {
         <div className="hidden print:block text-center pb-6 border-b-2 border-black">
           <h1 className="text-2xl font-black">{t.companyName}</h1>
           <p className="text-sm font-medium mt-1">{t.companySubtitle}</p>
-          <p className="text-xs text-slate-600 mt-1">گزارش بیلان مالی و تولید کارخانه ({period}) • تاریخ: {todayStr}</p>
+          <p className="text-xs text-slate-600 mt-1">
+            {t.factoryBalanceReportSubtitle} ({getPeriodLabel(period)}) • {t.date}: {todayStr}
+          </p>
         </div>
 
         {/* Financial & Production KPI Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-            <span className="text-xs font-semibold text-slate-500">مجموع فروش دوره</span>
+            <span className="text-xs font-semibold text-slate-500">{t.periodSalesTotal}</span>
             <div className="text-xl font-bold font-mono text-slate-900 mt-1">
               {totalSalesRevenue.toLocaleString()} {t.currency}
             </div>
-            <span className="text-xs text-amber-700 font-medium">{filteredSales.length} فاکتور ثبت شده</span>
+            <span className="text-xs text-amber-700 font-medium">
+              {filteredSales.length} {t.recordedInvoicesCount}
+            </span>
           </div>
 
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-            <span className="text-xs font-semibold text-slate-500">مجموع مصارف کارخانه</span>
+            <span className="text-xs font-semibold text-slate-500">{t.factoryExpensesTotal}</span>
             <div className="text-xl font-bold font-mono text-rose-700 mt-1">
               {totalExpensesSum.toLocaleString()} {t.currency}
             </div>
-            <span className="text-xs text-rose-600 font-medium">{filteredExpenses.length} فقره مصرف</span>
+            <span className="text-xs text-rose-600 font-medium">
+              {filteredExpenses.length} {t.expensesCountLabel}
+            </span>
           </div>
 
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-            <span className="text-xs font-semibold text-slate-500">سود ناخالص عملیاتی</span>
+            <span className="text-xs font-semibold text-slate-500">{t.operationalGrossProfit}</span>
             <div className="text-xl font-bold font-mono text-emerald-700 mt-1">
               {totalGrossProfit.toLocaleString()} {t.currency}
             </div>
-            <span className="text-xs text-emerald-600 font-medium">کسر بهای تمام‌شده کالا</span>
+            <span className="text-xs text-emerald-600 font-medium">{t.cogsDeductedLabel}</span>
           </div>
 
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-            <span className="text-xs font-semibold text-slate-500">سود خالص نهایی</span>
+            <span className="text-xs font-semibold text-slate-500">{t.netProfit}</span>
             <div className={`text-xl font-bold font-mono mt-1 ${netProfit >= 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
               {netProfit.toLocaleString()} {t.currency}
             </div>
-            <span className="text-xs text-slate-500">پس از کسر کلیه مصارف</span>
+            <span className="text-xs text-slate-500">{t.afterAllExpenses}</span>
           </div>
         </div>
 
@@ -180,11 +191,13 @@ export const ReportsView: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-slate-500">دانه تولید شده در این دوره</span>
+              <span className="text-xs font-semibold text-slate-500">{t.feedProducedInPeriod}</span>
               <div className="text-xl font-bold font-mono text-slate-900 mt-1">
                 {totalProducedKg.toLocaleString()} {t.kilo}
               </div>
-              <span className="text-xs text-amber-700 font-medium">معادل {totalProducedBags.toLocaleString()} {t.bag}</span>
+              <span className="text-xs text-amber-700 font-medium">
+                {t.equivalentTonRate} {totalProducedBags.toLocaleString()} {t.bag}
+              </span>
             </div>
             <div className="p-3 bg-amber-100 text-amber-700 rounded-xl">
               <PackageCheck className="w-6 h-6" />
@@ -193,11 +206,11 @@ export const ReportsView: React.FC = () => {
 
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-slate-500">بچ‌های تولیدی خط</span>
+              <span className="text-xs font-semibold text-slate-500">{t.prodBatchesLine}</span>
               <div className="text-xl font-bold font-mono text-slate-900 mt-1">
                 {filteredBatches.length} {t.records}
               </div>
-              <span className="text-xs text-slate-500">خط پروسس خودکار</span>
+              <span className="text-xs text-slate-500">{t.autoProcessLine}</span>
             </div>
             <div className="p-3 bg-blue-100 text-blue-700 rounded-xl">
               <Scale className="w-6 h-6" />
@@ -206,11 +219,11 @@ export const ReportsView: React.FC = () => {
 
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-slate-500">مواد خام مصرفی انبار</span>
+              <span className="text-xs font-semibold text-slate-500">{t.rawMaterialsConsumed}</span>
               <div className="text-xl font-bold font-mono text-slate-900 mt-1">
                 {db.rawMaterials.reduce((acc, r) => acc + r.stockKg, 0).toLocaleString()} {t.kilo}
               </div>
-              <span className="text-xs text-slate-500">موجودی فعلی سیلوها</span>
+              <span className="text-xs text-slate-500">{t.currentSiloStock}</span>
             </div>
             <div className="p-3 bg-emerald-100 text-emerald-700 rounded-xl">
               <Wheat className="w-6 h-6" />
@@ -223,10 +236,10 @@ export const ReportsView: React.FC = () => {
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm print:hidden">
         <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 mb-2">
           <FileText className="w-4 h-4 text-amber-600" />
-          <span>مدیریت اطلاعات و پشتیبان‌گیری دیتابیس (Backup & Restore)</span>
+          <span>{t.backupManagementTitle}</span>
         </h3>
         <p className="text-xs text-slate-600 mb-6">
-          شما می‌توانید از تمامی اطلاعات کارخانه (موجودی انبار، مشتریان، تامین‌کنندگان، فاکتورها و مصارف) فایل پشتیبان تهیه کرده و یا در صورت لزوم بازیابی کنید.
+          {t.backupManagementDesc}
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -234,14 +247,14 @@ export const ReportsView: React.FC = () => {
           <button
             type="button"
             onClick={exportDatabase}
-            className="p-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-900 flex items-center gap-3 transition-colors text-start group"
+            className="p-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-900 flex items-center gap-3 transition-colors text-start group cursor-pointer"
           >
             <div className="p-3 rounded-lg bg-amber-100 text-amber-700 group-hover:bg-amber-200 transition-colors">
               <Download className="w-5 h-5" />
             </div>
             <div>
-              <span className="font-bold block text-sm">دانلود فایل پشتیبان (JSON)</span>
-              <span className="text-xs text-slate-500">ذخیره تمام اطلاعات در رایانه</span>
+              <span className="font-bold block text-sm">{t.downloadBackupJson}</span>
+              <span className="text-xs text-slate-500">{t.saveDataLocally}</span>
             </div>
           </button>
 
@@ -251,8 +264,8 @@ export const ReportsView: React.FC = () => {
               <Upload className="w-5 h-5" />
             </div>
             <div>
-              <span className="font-bold block text-sm">بازیابی اطلاعات (Upload)</span>
-              <span className="text-xs text-slate-500">بارگذاری فایل پشتیبان قبلی</span>
+              <span className="font-bold block text-sm">{t.restoreDataUpload}</span>
+              <span className="text-xs text-slate-500">{t.uploadPreviousBackup}</span>
             </div>
             <input
               type="file"
@@ -272,8 +285,8 @@ export const ReportsView: React.FC = () => {
               <RotateCcw className="w-5 h-5" />
             </div>
             <div>
-              <span className="font-bold block text-sm">بازنشانی کارخانه</span>
-              <span className="text-xs text-rose-600">پاکسازی و بارگذاری اطلاعات نمونه</span>
+              <span className="font-bold block text-sm">{t.resetFactoryTitle}</span>
+              <span className="text-xs text-rose-600">{t.cleanAndLoadSampleData}</span>
             </div>
           </button>
         </div>
@@ -281,7 +294,7 @@ export const ReportsView: React.FC = () => {
 
       {/* Developed By Footer (Visible on Screen and Print) */}
       <div className="text-center pt-4 border-t border-slate-200 text-xs font-mono text-slate-500 print:text-black">
-        Developed by: rayan-tech-solutions.tech
+        {t.developedBy}
       </div>
 
       {/* Reset Confirmation Modal */}
