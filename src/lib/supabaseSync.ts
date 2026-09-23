@@ -15,6 +15,23 @@ import {
 
 export const isSupabaseConfigured = () => !!supabase;
 
+type SupabaseOperation = PromiseLike<{ error: { message: string } | null }>;
+
+let syncQueue: Promise<void> = Promise.resolve();
+
+async function checked(operation: SupabaseOperation, label: string): Promise<void> {
+  const { error } = await operation;
+  if (error) {
+    throw new Error(`${label}: ${error.message}`);
+  }
+}
+
+function queueSync(operation: () => Promise<void>): Promise<void> {
+  const next = syncQueue.then(operation);
+  syncQueue = next.catch(() => undefined);
+  return next;
+}
+
 export interface SupabaseLoadResult {
   state: DatabaseState;
   hasData: boolean;
@@ -240,7 +257,7 @@ export async function loadStateFromSupabase(): Promise<SupabaseLoadResult | null
 export async function seedInitialDataToSupabase(state: DatabaseState): Promise<boolean> {
   if (!supabase) return false;
 
-  try {
+  return queueSync(async () => {
     // 1. Raw Materials
     if (state.rawMaterials.length > 0) {
       const rows = state.rawMaterials.map(rm => ({
@@ -255,7 +272,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
         notes: rm.notes || null,
         low_stock_threshold: rm.lowStockThreshold || 5000,
       }));
-      await supabase.from('raw_materials').upsert(rows);
+      await checked(supabase.from('raw_materials').upsert(rows), 'raw_materials seed');
     }
 
     // 2. Suppliers & Transactions
@@ -270,7 +287,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
         balance_owed: s.balanceOwed,
         created_at: s.createdAt,
       }));
-      await supabase.from('suppliers').upsert(supRows);
+      await checked(supabase.from('suppliers').upsert(supRows), 'suppliers seed');
 
       const txRows = state.suppliers.flatMap(s => 
         s.transactions.map(t => ({
@@ -285,7 +302,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
         }))
       );
       if (txRows.length > 0) {
-        await supabase.from('supplier_transactions').upsert(txRows);
+        await checked(supabase.from('supplier_transactions').upsert(txRows), 'supplier_transactions seed');
       }
     }
 
@@ -301,7 +318,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
         balance_owed: c.balanceOwed,
         created_at: c.createdAt,
       }));
-      await supabase.from('customers').upsert(custRows);
+      await checked(supabase.from('customers').upsert(custRows), 'customers seed');
 
       const custTxRows = state.customers.flatMap(c => 
         c.transactions.map(t => ({
@@ -316,7 +333,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
         }))
       );
       if (custTxRows.length > 0) {
-        await supabase.from('customer_transactions').upsert(custTxRows);
+        await checked(supabase.from('customer_transactions').upsert(custTxRows), 'customer_transactions seed');
       }
     }
 
@@ -330,7 +347,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
         average_cost_per_kg: p.averageCostPerKg,
         last_updated: p.lastUpdated,
       }));
-      await supabase.from('processed_stock').upsert(procRows);
+      await checked(supabase.from('processed_stock').upsert(procRows), 'processed_stock seed');
     }
 
     // 5. Sales
@@ -354,7 +371,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
         profit: s.profit,
         notes: s.notes || null,
       }));
-      await supabase.from('sales').upsert(saleRows);
+      await checked(supabase.from('sales').upsert(saleRows), 'sales seed');
     }
 
     // 6. Expenses
@@ -368,7 +385,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
         paid_by: e.paidBy || null,
         notes: e.notes || null,
       }));
-      await supabase.from('expenses').upsert(expRows);
+      await checked(supabase.from('expenses').upsert(expRows), 'expenses seed');
     }
 
     // 7. Formulas
@@ -381,7 +398,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
         operator_name: null,
         date_created: f.createdDate,
       }));
-      await supabase.from('formulas').upsert(formRows);
+      await checked(supabase.from('formulas').upsert(formRows), 'formulas seed');
     }
 
     // 8. Production Batches
@@ -393,14 +410,12 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
         total_weight_kg: b.totalWeightKg,
         operator_name: b.operatorName || null,
       }));
-      await supabase.from('production_batches').upsert(batchRows);
+      await checked(supabase.from('production_batches').upsert(batchRows), 'production_batches seed');
     }
-
-    return true;
-  } catch (err) {
+  }).then(() => true).catch(err => {
     console.error('Error seeding data to Supabase:', err);
     return false;
-  }
+  });
 }
 
 // -------------------------------------------------------------
@@ -416,7 +431,7 @@ export async function sbSyncSale(
   if (!supabase) return;
   try {
     // 1. Insert sale record
-    await supabase.from('sales').upsert({
+    await checked(supabase.from('sales').upsert({
       id: sale.id,
       date: sale.date,
       product_id: sale.productId || null,
@@ -434,10 +449,10 @@ export async function sbSyncSale(
       total_cost_of_goods: sale.totalCostOfGoods,
       profit: sale.profit,
       notes: sale.notes || null,
-    });
+    }), 'sales sync');
 
     // 2. Upsert customer
-    await supabase.from('customers').upsert({
+    await checked(supabase.from('customers').upsert({
       id: customer.id,
       name: customer.name,
       phone: customer.phone || null,
@@ -446,10 +461,10 @@ export async function sbSyncSale(
       total_paid: customer.totalPaid,
       balance_owed: customer.balanceOwed,
       created_at: customer.createdAt,
-    });
+    }), 'customers sync');
 
     // 3. Insert customer transaction
-    await supabase.from('customer_transactions').upsert({
+    await checked(supabase.from('customer_transactions').upsert({
       id: customerTx.id,
       customer_id: customer.id,
       date: customerTx.date,
@@ -458,18 +473,18 @@ export async function sbSyncSale(
       amount: customerTx.amount,
       paid_amount: customerTx.paidAmount,
       remaining_amount: customerTx.remainingAmount,
-    });
+    }), 'customer_transactions sync');
 
     // 4. Update processed stock if applicable
     if (processedStockItem) {
-      await supabase.from('processed_stock').upsert({
+      await checked(supabase.from('processed_stock').upsert({
         id: processedStockItem.id,
         name: processedStockItem.name,
         formula_id: processedStockItem.formulaId || null,
         stock_kg: processedStockItem.stockKg,
         average_cost_per_kg: processedStockItem.averageCostPerKg,
         last_updated: processedStockItem.lastUpdated,
-      });
+      }), 'processed_stock sync');
     }
   } catch (err) {
     console.error('Supabase error syncing sale:', err);
@@ -482,7 +497,7 @@ export async function sbSyncCustomerPayment(
 ) {
   if (!supabase) return;
   try {
-    await supabase.from('customers').upsert({
+    await checked(supabase.from('customers').upsert({
       id: customer.id,
       name: customer.name,
       phone: customer.phone || null,
@@ -491,9 +506,9 @@ export async function sbSyncCustomerPayment(
       total_paid: customer.totalPaid,
       balance_owed: customer.balanceOwed,
       created_at: customer.createdAt,
-    });
+    }), 'customers payment sync');
 
-    await supabase.from('customer_transactions').upsert({
+    await checked(supabase.from('customer_transactions').upsert({
       id: transaction.id,
       customer_id: customer.id,
       date: transaction.date,
@@ -502,7 +517,7 @@ export async function sbSyncCustomerPayment(
       amount: transaction.amount,
       paid_amount: transaction.paidAmount,
       remaining_amount: transaction.remainingAmount,
-    });
+    }), 'customer_transactions payment sync');
   } catch (err) {
     console.error('Supabase error syncing customer payment:', err);
   }
@@ -511,8 +526,8 @@ export async function sbSyncCustomerPayment(
 export async function sbDeleteCustomer(customerId: string) {
   if (!supabase) return;
   try {
-    await supabase.from('customer_transactions').delete().eq('customer_id', customerId);
-    await supabase.from('customers').delete().eq('id', customerId);
+    await checked(supabase.from('customer_transactions').delete().eq('customer_id', customerId), 'customer_transactions delete');
+    await checked(supabase.from('customers').delete().eq('id', customerId), 'customers delete');
   } catch (err) {
     console.error('Supabase error deleting customer:', err);
   }
@@ -525,7 +540,7 @@ export async function sbSyncRawMaterial(
 ) {
   if (!supabase) return;
   try {
-    await supabase.from('raw_materials').upsert({
+    await checked(supabase.from('raw_materials').upsert({
       id: item.id,
       name: item.name,
       category: item.category,
@@ -536,10 +551,10 @@ export async function sbSyncRawMaterial(
       date_added: item.dateAdded,
       notes: item.notes || null,
       low_stock_threshold: item.lowStockThreshold || 5000,
-    });
+    }), 'raw_materials sync');
 
     if (supplier) {
-      await supabase.from('suppliers').upsert({
+      await checked(supabase.from('suppliers').upsert({
         id: supplier.id,
         name: supplier.name,
         phone: supplier.phone || null,
@@ -548,11 +563,11 @@ export async function sbSyncRawMaterial(
         total_paid: supplier.totalPaid,
         balance_owed: supplier.balanceOwed,
         created_at: supplier.createdAt,
-      });
+      }), 'suppliers sync');
     }
 
     if (supplierTx && supplier) {
-      await supabase.from('supplier_transactions').upsert({
+      await checked(supabase.from('supplier_transactions').upsert({
         id: supplierTx.id,
         supplier_id: supplier.id,
         date: supplierTx.date,
@@ -561,7 +576,7 @@ export async function sbSyncRawMaterial(
         amount: supplierTx.amount,
         paid_amount: supplierTx.paidAmount,
         remaining_amount: supplierTx.remainingAmount,
-      });
+      }), 'supplier_transactions sync');
     }
   } catch (err) {
     console.error('Supabase error syncing raw material:', err);
@@ -571,7 +586,7 @@ export async function sbSyncRawMaterial(
 export async function sbDeleteRawMaterial(id: string) {
   if (!supabase) return;
   try {
-    await supabase.from('raw_materials').delete().eq('id', id);
+    await checked(supabase.from('raw_materials').delete().eq('id', id), 'raw_materials delete');
   } catch (err) {
     console.error('Supabase error deleting raw material:', err);
   }
@@ -583,7 +598,7 @@ export async function sbSyncSupplierPayment(
 ) {
   if (!supabase) return;
   try {
-    await supabase.from('suppliers').upsert({
+    await checked(supabase.from('suppliers').upsert({
       id: supplier.id,
       name: supplier.name,
       phone: supplier.phone || null,
@@ -592,9 +607,9 @@ export async function sbSyncSupplierPayment(
       total_paid: supplier.totalPaid,
       balance_owed: supplier.balanceOwed,
       created_at: supplier.createdAt,
-    });
+    }), 'suppliers payment sync');
 
-    await supabase.from('supplier_transactions').upsert({
+    await checked(supabase.from('supplier_transactions').upsert({
       id: transaction.id,
       supplier_id: supplier.id,
       date: transaction.date,
@@ -603,7 +618,7 @@ export async function sbSyncSupplierPayment(
       amount: transaction.amount,
       paid_amount: transaction.paidAmount,
       remaining_amount: transaction.remainingAmount,
-    });
+    }), 'supplier_transactions payment sync');
   } catch (err) {
     console.error('Supabase error syncing supplier payment:', err);
   }
@@ -612,8 +627,8 @@ export async function sbSyncSupplierPayment(
 export async function sbDeleteSupplier(supplierId: string) {
   if (!supabase) return;
   try {
-    await supabase.from('supplier_transactions').delete().eq('supplier_id', supplierId);
-    await supabase.from('suppliers').delete().eq('id', supplierId);
+    await checked(supabase.from('supplier_transactions').delete().eq('supplier_id', supplierId), 'supplier_transactions delete');
+    await checked(supabase.from('suppliers').delete().eq('id', supplierId), 'suppliers delete');
   } catch (err) {
     console.error('Supabase error deleting supplier:', err);
   }
@@ -622,7 +637,7 @@ export async function sbDeleteSupplier(supplierId: string) {
 export async function sbSyncExpense(expense: Expense) {
   if (!supabase) return;
   try {
-    await supabase.from('expenses').upsert({
+    await checked(supabase.from('expenses').upsert({
       id: expense.id,
       date: expense.date,
       category: expense.category,
@@ -630,7 +645,7 @@ export async function sbSyncExpense(expense: Expense) {
       description: expense.description,
       paid_by: expense.paidBy || null,
       notes: expense.notes || null,
-    });
+    }), 'expenses sync');
   } catch (err) {
     console.error('Supabase error syncing expense:', err);
   }
@@ -639,7 +654,7 @@ export async function sbSyncExpense(expense: Expense) {
 export async function sbDeleteExpense(id: string) {
   if (!supabase) return;
   try {
-    await supabase.from('expenses').delete().eq('id', id);
+    await checked(supabase.from('expenses').delete().eq('id', id), 'expenses delete');
   } catch (err) {
     console.error('Supabase error deleting expense:', err);
   }
@@ -654,37 +669,37 @@ export async function sbSyncFormulaProduction(
   if (!supabase) return;
   try {
     // 1. Formula
-    await supabase.from('formulas').upsert({
+    await checked(supabase.from('formulas').upsert({
       id: formula.id,
       name: formula.name,
       description: formula.description || null,
       ingredients: formula.ingredients,
       operator_name: batch.operatorName || null,
       date_created: formula.createdDate,
-    });
+    }), 'formulas sync');
 
     // 2. Production Batch
-    await supabase.from('production_batches').upsert({
+    await checked(supabase.from('production_batches').upsert({
       id: batch.id,
       date: batch.date,
       formula_name: batch.formulaName,
       total_weight_kg: batch.totalWeightKg,
       operator_name: batch.operatorName || null,
-    });
+    }), 'production_batches sync');
 
     // 3. Processed Stock
-    await supabase.from('processed_stock').upsert({
+    await checked(supabase.from('processed_stock').upsert({
       id: processedItem.id,
       name: processedItem.name,
       formula_id: processedItem.formulaId || null,
       stock_kg: processedItem.stockKg,
       average_cost_per_kg: processedItem.averageCostPerKg,
       last_updated: processedItem.lastUpdated,
-    });
+    }), 'processed_stock production sync');
 
     // 4. Raw materials updated stock
     for (const rm of updatedRawMaterials) {
-      await supabase.from('raw_materials').update({ stock_kg: rm.stockKg }).eq('id', rm.id);
+      await checked(supabase.from('raw_materials').update({ stock_kg: rm.stockKg }).eq('id', rm.id), 'raw_materials production update');
     }
   } catch (err) {
     console.error('Supabase error syncing formula & batch:', err);
@@ -694,7 +709,7 @@ export async function sbSyncFormulaProduction(
 export async function sbDeleteFormula(formulaId: string) {
   if (!supabase) return;
   try {
-    await supabase.from('formulas').delete().eq('id', formulaId);
+    await checked(supabase.from('formulas').delete().eq('id', formulaId), 'formulas delete');
   } catch (err) {
     console.error('Supabase error deleting formula:', err);
   }
