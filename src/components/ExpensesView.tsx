@@ -22,6 +22,7 @@ export const ExpensesView: React.FC = () => {
   const { db, t, addExpense, deleteExpense } = useDatabase();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+  const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
 
   // Form State
   const [category, setCategory] = useState<ExpenseCategory>('fuel');
@@ -244,12 +245,8 @@ export const ExpensesView: React.FC = () => {
                     <td className="py-3.5 px-4 text-center">
                       <button
                         type="button"
-                        onClick={() => {
-                          if (window.confirm(t.confirmDelete)) {
-                            deleteExpense(exp.id);
-                          }
-                        }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        onClick={() => setExpenseToDelete(exp.id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                         title={t.delete}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -389,6 +386,42 @@ export const ExpensesView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* In-app Confirmation Modal for Expense Deletion */}
+      {expenseToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200 text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-2">
+              {t.delete}
+            </h3>
+            <p className="text-xs text-slate-600 mb-6">
+              {t.confirmDelete}
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setExpenseToDelete(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                {t.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteExpense(expenseToDelete);
+                  setExpenseToDelete(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 text-xs font-bold text-white hover:bg-rose-700 transition-colors cursor-pointer"
+              >
+                {t.delete}
+              </button>
+            </div>
           </div>
         </div>
       )}

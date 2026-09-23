@@ -1,0 +1,677 @@
+import { supabase } from './supabase';
+import { 
+  DatabaseState, 
+  RawMaterialItem, 
+  Supplier, 
+  Customer, 
+  ProcessedStockItem, 
+  Sale, 
+  Expense, 
+  Formula, 
+  ProductionBatch, 
+  SupplierTransaction, 
+  CustomerTransaction 
+} from '../types';
+
+export const isSupabaseConfigured = () => !!supabase;
+
+/**
+ * Loads the complete database state from Supabase tables.
+ */
+export async function loadStateFromSupabase(): Promise<DatabaseState | null> {
+  if (!supabase) return null;
+
+  try {
+    const [
+      rawRes,
+      supRes,
+      supTxRes,
+      custRes,
+      custTxRes,
+      procRes,
+      salesRes,
+      expRes,
+      formRes,
+      batchRes
+    ] = await Promise.all([
+      supabase.from('raw_materials').select('*'),
+      supabase.from('suppliers').select('*'),
+      supabase.from('supplier_transactions').select('*'),
+      supabase.from('customers').select('*'),
+      supabase.from('customer_transactions').select('*'),
+      supabase.from('processed_stock').select('*'),
+      supabase.from('sales').select('*').order('date', { ascending: false }),
+      supabase.from('expenses').select('*').order('date', { ascending: false }),
+      supabase.from('formulas').select('*'),
+      supabase.from('production_batches').select('*').order('date', { ascending: false }),
+    ]);
+
+    // Check if any critical query failed
+    if (rawRes.error || custRes.error || salesRes.error) {
+      console.warn('Supabase fetch error:', rawRes.error || custRes.error || salesRes.error);
+      return null;
+    }
+
+    const rawMaterials: RawMaterialItem[] = (rawRes.data || []).map(r => ({
+      id: r.id,
+      name: r.name,
+      category: r.category || 'Grains',
+      stockKg: Number(r.stock_kg) || 0,
+      unitPrice: Number(r.unit_price) || 0,
+      supplierId: r.supplier_id || undefined,
+      supplierName: r.supplier_name || undefined,
+      dateAdded: r.date_added || new Date().toISOString().split('T')[0],
+      notes: r.notes || undefined,
+      lowStockThreshold: r.low_stock_threshold ? Number(r.low_stock_threshold) : undefined,
+    }));
+
+    const supplierTransactions = supTxRes.data || [];
+    const suppliers: Supplier[] = (supRes.data || []).map(s => ({
+      id: s.id,
+      name: s.name,
+      phone: s.phone || '',
+      address: s.address || '',
+      totalPurchasedAmount: Number(s.total_purchased_amount) || 0,
+      totalPaid: Number(s.total_paid) || 0,
+      balanceOwed: Number(s.balance_owed) || 0,
+      createdAt: s.created_at || '',
+      transactions: supplierTransactions
+        .filter(tx => tx.supplier_id === s.id)
+        .map(tx => ({
+          id: tx.id,
+          date: tx.date,
+          type: tx.type,
+          description: tx.description,
+          amount: Number(tx.amount) || 0,
+          paidAmount: Number(tx.paid_amount) || 0,
+          remainingAmount: Number(tx.remaining_amount) || 0,
+        })),
+    }));
+
+    const customerTransactions = custTxRes.data || [];
+    const customers: Customer[] = (custRes.data || []).map(c => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone || '',
+      address: c.address || '',
+      totalPurchasedAmount: Number(c.total_purchased_amount) || 0,
+      totalPaid: Number(c.total_paid) || 0,
+      balanceOwed: Number(c.balance_owed) || 0,
+      createdAt: c.created_at || '',
+      transactions: customerTransactions
+        .filter(tx => tx.customer_id === c.id)
+        .map(tx => ({
+          id: tx.id,
+          date: tx.date,
+          type: tx.type,
+          description: tx.description,
+          amount: Number(tx.amount) || 0,
+          paidAmount: Number(tx.paid_amount) || 0,
+          remainingAmount: Number(tx.remaining_amount) || 0,
+        })),
+    }));
+
+    const processedStock: ProcessedStockItem[] = (procRes.data || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      formulaId: p.formula_id || undefined,
+      stockKg: Number(p.stock_kg) || 0,
+      averageCostPerKg: Number(p.average_cost_per_kg) || 0,
+      lastUpdated: p.last_updated || new Date().toISOString().split('T')[0],
+    }));
+
+    const sales: Sale[] = (salesRes.data || []).map(s => ({
+      id: s.id,
+      date: s.date,
+      customerId: s.customer_id || '',
+      customerName: s.customer_name,
+      customerPhone: s.customer_phone || undefined,
+      productId: s.product_id || '',
+      productName: s.product_name,
+      unitType: s.unit_type || 'bag',
+      unitQuantity: Number(s.unit_quantity) || 0,
+      quantityKg: Number(s.quantity_kg) || 0,
+      salePricePerUnit: Number(s.sale_price_per_unit) || 0,
+      totalAmount: Number(s.total_amount) || 0,
+      costRatePerKg: Number(s.quantity_kg) > 0 ? (Number(s.total_cost_of_goods) || 0) / Number(s.quantity_kg) : 30,
+      totalCostOfGoods: Number(s.total_cost_of_goods) || 0,
+      profit: Number(s.profit) || 0,
+      paidAmount: Number(s.paid_amount) || 0,
+      remainingAmount: Number(s.remaining_amount) || 0,
+      notes: s.notes || undefined,
+    }));
+
+    const expenses: Expense[] = (expRes.data || []).map(e => ({
+      id: e.id,
+      date: e.date,
+      category: e.category,
+      description: e.description,
+      amount: Number(e.amount) || 0,
+      paidBy: e.paid_by || undefined,
+      notes: e.notes || undefined,
+    }));
+
+    const formulas: Formula[] = (formRes.data || []).map(f => {
+      const ings = Array.isArray(f.ingredients) ? f.ingredients : [];
+      const totalWeight = ings.reduce((acc: number, ing: any) => acc + (Number(ing.weightKg) || 0), 0);
+      const totalCost = ings.reduce((acc: number, ing: any) => acc + (Number(ing.totalCost) || 0), 0);
+      return {
+        id: f.id,
+        name: f.name,
+        description: f.description || undefined,
+        ingredients: ings,
+        totalWeightKg: totalWeight,
+        totalBatchCost: totalCost,
+        costPerKg: totalWeight > 0 ? totalCost / totalWeight : 0,
+        createdDate: f.date_created || '',
+      };
+    });
+
+    const productionBatches: ProductionBatch[] = (batchRes.data || []).map(b => ({
+      id: b.id,
+      formulaId: b.formula_id || '',
+      formulaName: b.formula_name || '',
+      date: b.date,
+      totalWeightKg: Number(b.total_weight_kg) || 0,
+      costPerKg: Number(b.cost_per_kg) || 0,
+      totalCost: Number(b.total_cost) || 0,
+      operatorName: b.operator_name || undefined,
+      notes: b.notes || undefined,
+    }));
+
+    // Calculate cash in hand from sales received minus expenses paid
+    const totalSalesCash = sales.reduce((acc, s) => acc + s.paidAmount, 0);
+    const totalCustomerDebtReceived = customerTransactions
+      .filter(tx => tx.type === 'payment_received')
+      .reduce((acc, tx) => acc + tx.paidAmount, 0);
+    const totalExpensesCash = expenses.reduce((acc, e) => acc + e.amount, 0);
+    const calculatedCash = 1850000 + (totalSalesCash + totalCustomerDebtReceived) - totalExpensesCash;
+
+    // If tables are empty, return null so caller can seed
+    const hasData = rawMaterials.length > 0 || customers.length > 0 || sales.length > 0 || suppliers.length > 0;
+    if (!hasData) {
+      return null;
+    }
+
+    return {
+      rawMaterials,
+      processedStock,
+      suppliers,
+      customers,
+      formulas,
+      productionBatches,
+      sales,
+      expenses,
+      cashInHand: calculatedCash,
+    };
+  } catch (err) {
+    console.error('Failed to load state from Supabase:', err);
+    return null;
+  }
+}
+
+/**
+ * Seeds initial factory data to Supabase if tables are newly created and empty.
+ */
+export async function seedInitialDataToSupabase(state: DatabaseState): Promise<boolean> {
+  if (!supabase) return false;
+
+  try {
+    // 1. Raw Materials
+    if (state.rawMaterials.length > 0) {
+      const rows = state.rawMaterials.map(rm => ({
+        id: rm.id,
+        name: rm.name,
+        category: rm.category,
+        stock_kg: rm.stockKg,
+        unit_price: rm.unitPrice,
+        supplier_id: rm.supplierId || null,
+        supplier_name: rm.supplierName || null,
+        date_added: rm.dateAdded,
+        notes: rm.notes || null,
+        low_stock_threshold: rm.lowStockThreshold || 5000,
+      }));
+      await supabase.from('raw_materials').upsert(rows);
+    }
+
+    // 2. Suppliers & Transactions
+    if (state.suppliers.length > 0) {
+      const supRows = state.suppliers.map(s => ({
+        id: s.id,
+        name: s.name,
+        phone: s.phone || null,
+        address: s.address || null,
+        total_purchased_amount: s.totalPurchasedAmount,
+        total_paid: s.totalPaid,
+        balance_owed: s.balanceOwed,
+        created_at: s.createdAt,
+      }));
+      await supabase.from('suppliers').upsert(supRows);
+
+      const txRows = state.suppliers.flatMap(s => 
+        s.transactions.map(t => ({
+          id: t.id,
+          supplier_id: s.id,
+          date: t.date,
+          type: t.type,
+          description: t.description,
+          amount: t.amount,
+          paid_amount: t.paidAmount,
+          remaining_amount: t.remainingAmount,
+        }))
+      );
+      if (txRows.length > 0) {
+        await supabase.from('supplier_transactions').upsert(txRows);
+      }
+    }
+
+    // 3. Customers & Transactions
+    if (state.customers.length > 0) {
+      const custRows = state.customers.map(c => ({
+        id: c.id,
+        name: c.name,
+        phone: c.phone || null,
+        address: c.address || null,
+        total_purchased_amount: c.totalPurchasedAmount,
+        total_paid: c.totalPaid,
+        balance_owed: c.balanceOwed,
+        created_at: c.createdAt,
+      }));
+      await supabase.from('customers').upsert(custRows);
+
+      const custTxRows = state.customers.flatMap(c => 
+        c.transactions.map(t => ({
+          id: t.id,
+          customer_id: c.id,
+          date: t.date,
+          type: t.type,
+          description: t.description,
+          amount: t.amount,
+          paid_amount: t.paidAmount,
+          remaining_amount: t.remainingAmount,
+        }))
+      );
+      if (custTxRows.length > 0) {
+        await supabase.from('customer_transactions').upsert(custTxRows);
+      }
+    }
+
+    // 4. Processed Stock
+    if (state.processedStock.length > 0) {
+      const procRows = state.processedStock.map(p => ({
+        id: p.id,
+        name: p.name,
+        formula_id: p.formulaId || null,
+        stock_kg: p.stockKg,
+        average_cost_per_kg: p.averageCostPerKg,
+        last_updated: p.lastUpdated,
+      }));
+      await supabase.from('processed_stock').upsert(procRows);
+    }
+
+    // 5. Sales
+    if (state.sales.length > 0) {
+      const saleRows = state.sales.map(s => ({
+        id: s.id,
+        date: s.date,
+        product_id: s.productId || null,
+        product_name: s.productName,
+        customer_id: s.customerId || null,
+        customer_name: s.customerName,
+        customer_phone: s.customerPhone || null,
+        unit_type: s.unitType,
+        unit_quantity: s.unitQuantity,
+        quantity_kg: s.quantityKg,
+        sale_price_per_unit: s.salePricePerUnit,
+        total_amount: s.totalAmount,
+        paid_amount: s.paidAmount,
+        remaining_amount: s.remainingAmount,
+        total_cost_of_goods: s.totalCostOfGoods,
+        profit: s.profit,
+        notes: s.notes || null,
+      }));
+      await supabase.from('sales').upsert(saleRows);
+    }
+
+    // 6. Expenses
+    if (state.expenses.length > 0) {
+      const expRows = state.expenses.map(e => ({
+        id: e.id,
+        date: e.date,
+        category: e.category,
+        amount: e.amount,
+        description: e.description,
+        paid_by: e.paidBy || null,
+        notes: e.notes || null,
+      }));
+      await supabase.from('expenses').upsert(expRows);
+    }
+
+    // 7. Formulas
+    if (state.formulas.length > 0) {
+      const formRows = state.formulas.map(f => ({
+        id: f.id,
+        name: f.name,
+        description: f.description || null,
+        ingredients: f.ingredients,
+        operator_name: null,
+        date_created: f.createdDate,
+      }));
+      await supabase.from('formulas').upsert(formRows);
+    }
+
+    // 8. Production Batches
+    if (state.productionBatches.length > 0) {
+      const batchRows = state.productionBatches.map(b => ({
+        id: b.id,
+        date: b.date,
+        formula_name: b.formulaName,
+        total_weight_kg: b.totalWeightKg,
+        operator_name: b.operatorName || null,
+      }));
+      await supabase.from('production_batches').upsert(batchRows);
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error seeding data to Supabase:', err);
+    return false;
+  }
+}
+
+// -------------------------------------------------------------
+// Real-time Entity Sync Handlers
+// -------------------------------------------------------------
+
+export async function sbSyncSale(
+  sale: Sale,
+  customer: Customer,
+  customerTx: CustomerTransaction,
+  processedStockItem?: ProcessedStockItem
+) {
+  if (!supabase) return;
+  try {
+    // 1. Insert sale record
+    await supabase.from('sales').upsert({
+      id: sale.id,
+      date: sale.date,
+      product_id: sale.productId || null,
+      product_name: sale.productName,
+      customer_id: sale.customerId || null,
+      customer_name: sale.customerName,
+      customer_phone: sale.customerPhone || null,
+      unit_type: sale.unitType,
+      unit_quantity: sale.unitQuantity,
+      quantity_kg: sale.quantityKg,
+      sale_price_per_unit: sale.salePricePerUnit,
+      total_amount: sale.totalAmount,
+      paid_amount: sale.paidAmount,
+      remaining_amount: sale.remainingAmount,
+      total_cost_of_goods: sale.totalCostOfGoods,
+      profit: sale.profit,
+      notes: sale.notes || null,
+    });
+
+    // 2. Upsert customer
+    await supabase.from('customers').upsert({
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone || null,
+      address: customer.address || null,
+      total_purchased_amount: customer.totalPurchasedAmount,
+      total_paid: customer.totalPaid,
+      balance_owed: customer.balanceOwed,
+      created_at: customer.createdAt,
+    });
+
+    // 3. Insert customer transaction
+    await supabase.from('customer_transactions').upsert({
+      id: customerTx.id,
+      customer_id: customer.id,
+      date: customerTx.date,
+      type: customerTx.type,
+      description: customerTx.description,
+      amount: customerTx.amount,
+      paid_amount: customerTx.paidAmount,
+      remaining_amount: customerTx.remainingAmount,
+    });
+
+    // 4. Update processed stock if applicable
+    if (processedStockItem) {
+      await supabase.from('processed_stock').upsert({
+        id: processedStockItem.id,
+        name: processedStockItem.name,
+        formula_id: processedStockItem.formulaId || null,
+        stock_kg: processedStockItem.stockKg,
+        average_cost_per_kg: processedStockItem.averageCostPerKg,
+        last_updated: processedStockItem.lastUpdated,
+      });
+    }
+  } catch (err) {
+    console.error('Supabase error syncing sale:', err);
+  }
+}
+
+export async function sbSyncCustomerPayment(
+  customer: Customer,
+  transaction: CustomerTransaction
+) {
+  if (!supabase) return;
+  try {
+    await supabase.from('customers').upsert({
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone || null,
+      address: customer.address || null,
+      total_purchased_amount: customer.totalPurchasedAmount,
+      total_paid: customer.totalPaid,
+      balance_owed: customer.balanceOwed,
+      created_at: customer.createdAt,
+    });
+
+    await supabase.from('customer_transactions').upsert({
+      id: transaction.id,
+      customer_id: customer.id,
+      date: transaction.date,
+      type: transaction.type,
+      description: transaction.description,
+      amount: transaction.amount,
+      paid_amount: transaction.paidAmount,
+      remaining_amount: transaction.remainingAmount,
+    });
+  } catch (err) {
+    console.error('Supabase error syncing customer payment:', err);
+  }
+}
+
+export async function sbDeleteCustomer(customerId: string) {
+  if (!supabase) return;
+  try {
+    await supabase.from('customer_transactions').delete().eq('customer_id', customerId);
+    await supabase.from('customers').delete().eq('id', customerId);
+  } catch (err) {
+    console.error('Supabase error deleting customer:', err);
+  }
+}
+
+export async function sbSyncRawMaterial(
+  item: RawMaterialItem,
+  supplier?: Supplier,
+  supplierTx?: SupplierTransaction
+) {
+  if (!supabase) return;
+  try {
+    await supabase.from('raw_materials').upsert({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      stock_kg: item.stockKg,
+      unit_price: item.unitPrice,
+      supplier_id: item.supplierId || null,
+      supplier_name: item.supplierName || null,
+      date_added: item.dateAdded,
+      notes: item.notes || null,
+      low_stock_threshold: item.lowStockThreshold || 5000,
+    });
+
+    if (supplier) {
+      await supabase.from('suppliers').upsert({
+        id: supplier.id,
+        name: supplier.name,
+        phone: supplier.phone || null,
+        address: supplier.address || null,
+        total_purchased_amount: supplier.totalPurchasedAmount,
+        total_paid: supplier.totalPaid,
+        balance_owed: supplier.balanceOwed,
+        created_at: supplier.createdAt,
+      });
+    }
+
+    if (supplierTx && supplier) {
+      await supabase.from('supplier_transactions').upsert({
+        id: supplierTx.id,
+        supplier_id: supplier.id,
+        date: supplierTx.date,
+        type: supplierTx.type,
+        description: supplierTx.description,
+        amount: supplierTx.amount,
+        paid_amount: supplierTx.paidAmount,
+        remaining_amount: supplierTx.remainingAmount,
+      });
+    }
+  } catch (err) {
+    console.error('Supabase error syncing raw material:', err);
+  }
+}
+
+export async function sbDeleteRawMaterial(id: string) {
+  if (!supabase) return;
+  try {
+    await supabase.from('raw_materials').delete().eq('id', id);
+  } catch (err) {
+    console.error('Supabase error deleting raw material:', err);
+  }
+}
+
+export async function sbSyncSupplierPayment(
+  supplier: Supplier,
+  transaction: SupplierTransaction
+) {
+  if (!supabase) return;
+  try {
+    await supabase.from('suppliers').upsert({
+      id: supplier.id,
+      name: supplier.name,
+      phone: supplier.phone || null,
+      address: supplier.address || null,
+      total_purchased_amount: supplier.totalPurchasedAmount,
+      total_paid: supplier.totalPaid,
+      balance_owed: supplier.balanceOwed,
+      created_at: supplier.createdAt,
+    });
+
+    await supabase.from('supplier_transactions').upsert({
+      id: transaction.id,
+      supplier_id: supplier.id,
+      date: transaction.date,
+      type: transaction.type,
+      description: transaction.description,
+      amount: transaction.amount,
+      paid_amount: transaction.paidAmount,
+      remaining_amount: transaction.remainingAmount,
+    });
+  } catch (err) {
+    console.error('Supabase error syncing supplier payment:', err);
+  }
+}
+
+export async function sbDeleteSupplier(supplierId: string) {
+  if (!supabase) return;
+  try {
+    await supabase.from('supplier_transactions').delete().eq('supplier_id', supplierId);
+    await supabase.from('suppliers').delete().eq('id', supplierId);
+  } catch (err) {
+    console.error('Supabase error deleting supplier:', err);
+  }
+}
+
+export async function sbSyncExpense(expense: Expense) {
+  if (!supabase) return;
+  try {
+    await supabase.from('expenses').upsert({
+      id: expense.id,
+      date: expense.date,
+      category: expense.category,
+      amount: expense.amount,
+      description: expense.description,
+      paid_by: expense.paidBy || null,
+      notes: expense.notes || null,
+    });
+  } catch (err) {
+    console.error('Supabase error syncing expense:', err);
+  }
+}
+
+export async function sbDeleteExpense(id: string) {
+  if (!supabase) return;
+  try {
+    await supabase.from('expenses').delete().eq('id', id);
+  } catch (err) {
+    console.error('Supabase error deleting expense:', err);
+  }
+}
+
+export async function sbSyncFormulaProduction(
+  formula: Formula,
+  batch: ProductionBatch,
+  updatedRawMaterials: RawMaterialItem[],
+  processedItem: ProcessedStockItem
+) {
+  if (!supabase) return;
+  try {
+    // 1. Formula
+    await supabase.from('formulas').upsert({
+      id: formula.id,
+      name: formula.name,
+      description: formula.description || null,
+      ingredients: formula.ingredients,
+      operator_name: batch.operatorName || null,
+      date_created: formula.createdDate,
+    });
+
+    // 2. Production Batch
+    await supabase.from('production_batches').upsert({
+      id: batch.id,
+      date: batch.date,
+      formula_name: batch.formulaName,
+      total_weight_kg: batch.totalWeightKg,
+      operator_name: batch.operatorName || null,
+    });
+
+    // 3. Processed Stock
+    await supabase.from('processed_stock').upsert({
+      id: processedItem.id,
+      name: processedItem.name,
+      formula_id: processedItem.formulaId || null,
+      stock_kg: processedItem.stockKg,
+      average_cost_per_kg: processedItem.averageCostPerKg,
+      last_updated: processedItem.lastUpdated,
+    });
+
+    // 4. Raw materials updated stock
+    for (const rm of updatedRawMaterials) {
+      await supabase.from('raw_materials').update({ stock_kg: rm.stockKg }).eq('id', rm.id);
+    }
+  } catch (err) {
+    console.error('Supabase error syncing formula & batch:', err);
+  }
+}
+
+export async function sbDeleteFormula(formulaId: string) {
+  if (!supabase) return;
+  try {
+    await supabase.from('formulas').delete().eq('id', formulaId);
+  } catch (err) {
+    console.error('Supabase error deleting formula:', err);
+  }
+}

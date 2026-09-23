@@ -254,6 +254,12 @@ export const translations = {
     totalPaid: 'مجموع پرداخت',
     balanceOwedToSupplier: 'باقی‌داری به عرضه کننده',
     totalBill: 'بل کل',
+    batchProductionExpense: 'مصارف تولیدی بچ (برق، کارگر، ترانسپورت)',
+    costPerKiloAfterExpenses: 'نرخ تمام‌شد هر کیلو پس از احتساب مصارف',
+    deleteFormula: 'حذف فرمول',
+    confirmDeleteFormula: 'آیا از حذف این فرمول اطمینان دارید؟',
+    developedBy: 'Developed by: rayan-tech-solutions.tech',
+    costRateInfo: 'قیمت تمام‌شد برای کارخانه:',
   },
   
   ps: {
@@ -509,6 +515,12 @@ export const translations = {
     totalPaid: 'ټول ورکړل شوي',
     balanceOwedToSupplier: 'عرضه کوونکي ته پاتې پور',
     totalBill: 'ټول بل',
+    batchProductionExpense: 'د تولید لګښتونه (برېښنا، کاریګر، ټرانسپورټ)',
+    costPerKiloAfterExpenses: 'د لګښتونو وروسته د هر کیلو تمام شوی نرخ',
+    deleteFormula: 'د فورمول ړنګول',
+    confirmDeleteFormula: 'ایا تاسو ډاډه یاست چې دا فورمول ړنګ کړئ؟',
+    developedBy: 'Developed by: rayan-tech-solutions.tech',
+    costRateInfo: 'د فابریکې لپاره تمام شوی بیه:',
   },
   
   en: {
@@ -764,6 +776,14 @@ export const translations = {
     totalPaid: 'Total Paid',
     balanceOwedToSupplier: 'Balance Owed to Supplier',
     totalBill: 'Total Bill',
+    batchProductionExpense: 'Batch Production Expenses (Electricity, Labor, etc.)',
+    costPerKiloAfterExpenses: 'Cost Per Kg After Expenses',
+    deleteFormula: 'Delete Formula',
+    confirmDeleteFormula: 'Are you sure you want to delete this formula?',
+    developedBy: 'Developed by: rayan-tech-solutions.tech',
+    costRateInfo: 'Factory Cost Rate:',
+    estimatedProfitExplanation: 'Estimated Net Profit = Total Revenue minus Total Cost of Goods Sold (Quantity × Average Production Cost per Kg)',
+    costRateVisibilityToggle: 'Cost rate & profit visibility toggle for privacy',
   },
 };
 

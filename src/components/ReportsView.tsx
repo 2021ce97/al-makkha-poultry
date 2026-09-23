@@ -21,6 +21,7 @@ export const ReportsView: React.FC = () => {
   const { db, t, lang, exportDatabase, importDatabase, resetToDefaultData, getLocalizedName } = useDatabase();
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('daily');
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Helper date filtering
   const now = new Date();
@@ -264,12 +265,8 @@ export const ReportsView: React.FC = () => {
           {/* Reset to Factory Defaults */}
           <button
             type="button"
-            onClick={() => {
-              if (window.confirm('آیا مطمئن هستید که می‌خواهید همه اطلاعات را به حالت پیش‌فرض کارخانه بازنشانی کنید؟')) {
-                resetToDefaultData();
-              }
-            }}
-            className="p-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-rose-700 flex items-center gap-3 transition-colors text-start group"
+            onClick={() => setShowResetConfirm(true)}
+            className="p-4 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-rose-700 flex items-center gap-3 transition-colors text-start group cursor-pointer"
           >
             <div className="p-3 rounded-lg bg-rose-100 text-rose-700 group-hover:bg-rose-200 transition-colors">
               <RotateCcw className="w-5 h-5" />
@@ -281,6 +278,47 @@ export const ReportsView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Developed By Footer (Visible on Screen and Print) */}
+      <div className="text-center pt-4 border-t border-slate-200 text-xs font-mono text-slate-500 print:text-black">
+        Developed by: rayan-tech-solutions.tech
+      </div>
+
+      {/* Reset Confirmation Modal */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200 text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+              <RotateCcw className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-2">
+              {t.resetDatabase}
+            </h3>
+            <p className="text-xs text-slate-600 mb-6">
+              {t.confirmResetDatabase}
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                {t.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  resetToDefaultData();
+                  setShowResetConfirm(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 text-xs font-bold text-white hover:bg-rose-700 transition-colors cursor-pointer"
+              >
+                {t.resetDatabase}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

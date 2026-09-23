@@ -15,7 +15,22 @@ import {
 } from '../types';
 import { initialFactoryData } from '../initialData';
 import { translations, getLocalizedItemName, getLocalizedCategory } from '../translations';
-import { supabase } from '../lib/supabase.ts';
+import { supabase } from '../lib/supabase';
+import { 
+  loadStateFromSupabase, 
+  seedInitialDataToSupabase,
+  sbSyncSale,
+  sbSyncCustomerPayment,
+  sbDeleteCustomer,
+  sbSyncRawMaterial,
+  sbDeleteRawMaterial,
+  sbSyncSupplierPayment,
+  sbDeleteSupplier,
+  sbSyncExpense,
+  sbDeleteExpense,
+  sbSyncFormulaProduction,
+  sbDeleteFormula
+} from '../lib/supabaseSync';
 
 const STORAGE_KEY = 'mahir_poultry_feed_db_v1';
 const LANG_STORAGE_KEY = 'mahir_poultry_feed_lang';
@@ -34,6 +49,7 @@ interface DatabaseContextType {
   // Low Stock Notification Threshold
   lowStockThreshold: number;
   setLowStockThreshold: (threshold: number) => void;
+  updateRawMaterialThreshold: (id: string, threshold: number) => void;
   lowStockMaterials: RawMaterialItem[];
   // Localization helpers
   getLocalizedName: (name: string) => string;
@@ -54,15 +70,17 @@ interface DatabaseContextType {
     ingredients: { rawMaterialId: string; weightKg: number }[],
     description?: string,
     operatorName?: string,
-    produceBatchImmediately?: boolean
+    produceBatchImmediately?: boolean,
+    batchExpenses?: number
   ) => { success: boolean; error?: string };
+  deleteFormula: (formulaId: string) => void;
   // Sales & Customers
   recordSale: (saleData: {
-    productId: string;
+    productId?: string;
     productName: string;
     customerId?: string;
     customerName: string;
-    customerPhone: string;
+    customerPhone?: string;
     unitType: UnitType;
     unitQuantity: number;
     salePricePerUnit: number;
@@ -103,45 +121,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
 
-  useEffect(() => {
-    if (supabase) {
-      setIsSupabaseConnected(true);
-    }
-  }, []);
-
-  const login = (emailInput: string, passwordInput: string): boolean => {
-    const cleanEmail = emailInput.trim().toLowerCase();
-    const cleanPass = passwordInput.trim();
-    if (
-      (cleanEmail === 'rayan@poletry.af' || cleanEmail === 'rayan' || cleanEmail === 'rayan@poultry.af') &&
-      cleanPass === 'Rayan6789'
-    ) {
-      const authUser: AuthUser = {
-        email: 'Rayan@poletry.af',
-        name: 'ریان (Rayan)',
-        role: 'مدیر عمومی کارخانه (Director)',
-        loginTime: new Date().toISOString(),
-      };
-      setUser(authUser);
-      try {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
-      } catch (err) {
-        console.error(err);
-      }
-      return true;
-    }
-    return false;
-  };
-
-  const logout = () => {
-    setUser(null);
-    try {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   // User-defined Low Stock Threshold
   const [lowStockThreshold, setLowStockThresholdState] = useState<number>(() => {
     try {
@@ -178,7 +157,47 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return initialFactoryData;
   });
 
-  // Keep localStorage in sync
+  // Initial Supabase Load & Real-time Subscription
+  useEffect(() => {
+    if (!supabase) return;
+    setIsSupabaseConnected(true);
+
+    let isMounted = true;
+
+    // 1. Fetch live tables from Supabase
+    loadStateFromSupabase().then(loadedState => {
+      if (!isMounted) return;
+      if (loadedState) {
+        setDb(loadedState);
+      } else {
+        // Supabase tables are freshly initialized and empty, seed factory data
+        seedInitialDataToSupabase(initialFactoryData);
+      }
+    });
+
+    // 2. Real-time changes subscription
+    const channel = supabase
+      .channel('supabase-live-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public' },
+        () => {
+          loadStateFromSupabase().then(latest => {
+            if (isMounted && latest) {
+              setDb(latest);
+            }
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Keep localStorage in sync as offline backup
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
@@ -201,9 +220,40 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const t = translations[lang];
 
+  const login = (emailInput: string, passwordInput: string): boolean => {
+    const cleanEmail = emailInput.trim().toLowerCase();
+    const cleanPass = passwordInput.trim();
+    if (
+      (cleanEmail === 'rayan@poletry.af' || cleanEmail === 'rayan' || cleanEmail === 'rayan@poultry.af') &&
+      cleanPass === 'Rayan6789'
+    ) {
+      const authUser: AuthUser = {
+        email: 'Rayan@poletry.af',
+        name: 'ریان (Rayan)',
+        role: 'مدیر عمومی کارخانه (Director)',
+        loginTime: new Date().toISOString(),
+      };
+      setUser(authUser);
+      try {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
+      } catch (err) {
+        console.error(err);
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const logout = () => {
+    setUser(null);
+    try {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Helper to convert units to kilos
-  // 1 Bag = 50 kg (20 bags = 1 ton / 1000 kg as noted by user)
-  // 1 Ton = 1000 kg
   const convertToKg = (unitType: UnitType, quantity: number): number => {
     switch (unitType) {
       case 'bag':
@@ -227,6 +277,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const totalBill = item.stockKg * item.unitPrice;
     const remaining = Math.max(0, totalBill - paidAmount);
 
+    const newItem: RawMaterialItem = {
+      ...item,
+      id: newId,
+      dateAdded: today,
+    };
+
+    let updatedSupplierToSync: Supplier | undefined;
+    let supplierTxToSync: any | undefined;
+
     setDb(prev => {
       let updatedSuppliers = [...prev.suppliers];
       let assignedSupplierId = item.supplierId;
@@ -246,21 +305,24 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           paidAmount: paidAmount,
           remainingAmount: remaining,
         };
+        supplierTxToSync = transaction;
 
         if (existingSupIndex >= 0) {
-          const existing = updatedSuppliers[existingSupIndex];
-          assignedSupplierId = existing.id;
-          updatedSuppliers[existingSupIndex] = {
-            ...existing,
-            phone: supplierPhone || existing.phone,
-            totalPurchasedAmount: existing.totalPurchasedAmount + totalBill,
-            totalPaid: existing.totalPaid + paidAmount,
-            balanceOwed: existing.balanceOwed + remaining,
-            transactions: [transaction, ...existing.transactions],
+          const sup = updatedSuppliers[existingSupIndex];
+          assignedSupplierId = sup.id;
+          const updatedSup = {
+            ...sup,
+            phone: supplierPhone || sup.phone,
+            totalPurchasedAmount: sup.totalPurchasedAmount + totalBill,
+            totalPaid: sup.totalPaid + paidAmount,
+            balanceOwed: sup.balanceOwed + remaining,
+            transactions: [transaction, ...sup.transactions],
           };
+          updatedSuppliers[existingSupIndex] = updatedSup;
+          updatedSupplierToSync = updatedSup;
         } else {
           assignedSupplierId = `sup-${Date.now()}`;
-          updatedSuppliers.unshift({
+          const newSup: Supplier = {
             id: assignedSupplierId,
             name: supName,
             phone: supplierPhone || '',
@@ -269,52 +331,40 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             balanceOwed: remaining,
             transactions: [transaction],
             createdAt: today,
-          });
+          };
+          updatedSuppliers.unshift(newSup);
+          updatedSupplierToSync = newSup;
         }
       }
 
-      // Check if this raw material item already exists by name
-      const existingRawIndex = prev.rawMaterials.findIndex(
-        r => r.name.toLowerCase() === item.name.trim().toLowerCase()
-      );
-
-      let updatedRawMaterials: RawMaterialItem[];
-      if (existingRawIndex >= 0) {
-        const existing = prev.rawMaterials[existingRawIndex];
-        const combinedKg = existing.stockKg + item.stockKg;
-        // Weighted average cost per kg
-        const combinedCostPerKg = combinedKg > 0 
-          ? ((existing.stockKg * existing.unitPrice) + (item.stockKg * item.unitPrice)) / combinedKg
-          : item.unitPrice;
-
-        updatedRawMaterials = [...prev.rawMaterials];
-        updatedRawMaterials[existingRawIndex] = {
-          ...existing,
-          stockKg: combinedKg,
-          unitPrice: Math.round(combinedCostPerKg * 100) / 100,
-          supplierId: assignedSupplierId || existing.supplierId,
-          supplierName: item.supplierName || existing.supplierName,
-          dateAdded: today,
-          lowStockThreshold: item.lowStockThreshold ?? existing.lowStockThreshold,
-        };
-      } else {
-        const newRawMaterial: RawMaterialItem = {
-          ...item,
-          id: newId,
-          supplierId: assignedSupplierId,
-          dateAdded: today,
-        };
-        updatedRawMaterials = [newRawMaterial, ...prev.rawMaterials];
-      }
-
-      // Deduct paidAmount from cashInHand
-      const updatedCash = prev.cashInHand - paidAmount;
+      newItem.supplierId = assignedSupplierId;
 
       return {
         ...prev,
-        rawMaterials: updatedRawMaterials,
+        rawMaterials: [newItem, ...prev.rawMaterials],
         suppliers: updatedSuppliers,
-        cashInHand: updatedCash,
+        cashInHand: prev.cashInHand - paidAmount,
+      };
+    });
+
+    // Supabase push
+    sbSyncRawMaterial(newItem, updatedSupplierToSync, supplierTxToSync);
+  };
+
+  // UPDATE RAW MATERIAL THRESHOLD PER ITEM
+  const updateRawMaterialThreshold = (id: string, threshold: number) => {
+    setDb(prev => {
+      const updatedRaw = prev.rawMaterials.map(rm => {
+        if (rm.id === id) {
+          const updated = { ...rm, lowStockThreshold: threshold };
+          sbSyncRawMaterial(updated);
+          return updated;
+        }
+        return rm;
+      });
+      return {
+        ...prev,
+        rawMaterials: updatedRaw,
       };
     });
   };
@@ -323,11 +373,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const deleteRawMaterial = (id: string) => {
     setDb(prev => ({
       ...prev,
-      rawMaterials: prev.rawMaterials.filter(r => r.id !== id),
+      rawMaterials: prev.rawMaterials.filter(rm => rm.id !== id),
     }));
+    sbDeleteRawMaterial(id);
   };
 
-  // SETTLE SUPPLIER PAYMENT
+  // SETTLE PAYMENT TO SUPPLIER
   const settleSupplierPayment = (supplierId: string, amountToPay: number, note?: string) => {
     if (amountToPay <= 0) return;
     const today = new Date().toISOString().split('T')[0];
@@ -344,19 +395,23 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         id: `st-${Date.now()}`,
         date: today,
         type: 'payment' as const,
-        description: note || 'پرداخت باقی‌داری حساب عرضه کننده',
+        description: note || 'پرداخت قرض و تصفیه حساب با عرضه کننده',
         amount: 0,
         paidAmount: actualPay,
         remainingAmount: newRemaining,
       };
 
       const updatedSuppliers = [...prev.suppliers];
-      updatedSuppliers[supIndex] = {
+      const updatedSup = {
         ...sup,
         totalPaid: sup.totalPaid + actualPay,
         balanceOwed: newRemaining,
         transactions: [transaction, ...sup.transactions],
       };
+      updatedSuppliers[supIndex] = updatedSup;
+
+      // Supabase push
+      sbSyncSupplierPayment(updatedSup, transaction);
 
       return {
         ...prev,
@@ -372,15 +427,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ...prev,
       suppliers: prev.suppliers.filter(s => s.id !== supplierId),
     }));
+    sbDeleteSupplier(supplierId);
   };
 
-  // 2. CREATE FORMULA & PRODUCE BATCH (DEDUCT RAW MATERIALS, ADD PROCESSED STOCK)
+  // 2. CREATE FORMULA & PRODUCE BATCH
   const createFormulaAndProduce = (
     name: string,
     ingredients: { rawMaterialId: string; weightKg: number }[],
     description?: string,
     operatorName?: string,
-    produceBatchImmediately = true
+    produceBatchImmediately = true,
+    batchExpenses = 0
   ) => {
     // 1. Verify stock availability
     for (const ing of ingredients) {
@@ -417,7 +474,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
     });
 
-    const costPerKg = totalWeight > 0 ? Math.round((totalBatchCost / totalWeight) * 100) / 100 : 0;
+    const totalBatchCostWithExpenses = totalBatchCost + (Number(batchExpenses) || 0);
+    const costPerKg = totalWeight > 0 ? Math.round((totalBatchCostWithExpenses / totalWeight) * 100) / 100 : 0;
 
     const newFormula: Formula = {
       id: formulaId,
@@ -425,7 +483,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       description,
       ingredients: populatedIngredients,
       totalWeightKg: totalWeight,
-      totalBatchCost,
+      totalBatchCost: totalBatchCostWithExpenses,
       costPerKg,
       createdDate: today,
     };
@@ -437,20 +495,25 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       date: today,
       totalWeightKg: totalWeight,
       costPerKg,
-      totalCost: totalBatchCost,
+      totalCost: totalBatchCostWithExpenses,
       operatorName: operatorName || 'مسئول تولید',
-      notes: `پروسس خودکار: ${name} (${totalWeight.toLocaleString()} کیلو)`,
+      notes: `پروسس خودکار: ${name} (${totalWeight.toLocaleString()} کیلو)${batchExpenses > 0 ? ` • مصارف جانبی: ${batchExpenses.toLocaleString()} ${t.currency}` : ''}`,
     };
+
+    let processedItemToSync: ProcessedStockItem | undefined;
+    let updatedRawMaterialsToSync: RawMaterialItem[] = [];
 
     setDb(prev => {
       // Deduct raw materials
       const updatedRaw = prev.rawMaterials.map(rm => {
         const used = ingredients.find(ing => ing.rawMaterialId === rm.id);
         if (used) {
-          return {
+          const updated = {
             ...rm,
             stockKg: Math.max(0, rm.stockKg - used.weightKg),
           };
+          updatedRawMaterialsToSync.push(updated);
+          return updated;
         }
         return rm;
       });
@@ -468,13 +531,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ? ((existing.stockKg * existing.averageCostPerKg) + (totalWeight * costPerKg)) / newTotalKg
           : costPerKg;
 
-        updatedProcessedStock = [...prev.processedStock];
-        updatedProcessedStock[existingProcessedIndex] = {
+        const updatedItem: ProcessedStockItem = {
           ...existing,
           stockKg: newTotalKg,
           averageCostPerKg: Math.round(newAvgCost * 100) / 100,
           lastUpdated: today,
         };
+        processedItemToSync = updatedItem;
+        updatedProcessedStock = [...prev.processedStock];
+        updatedProcessedStock[existingProcessedIndex] = updatedItem;
       } else {
         const newProcessedItem: ProcessedStockItem = {
           id: `ps-${Date.now()}`,
@@ -484,7 +549,25 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           averageCostPerKg: costPerKg,
           lastUpdated: today,
         };
+        processedItemToSync = newProcessedItem;
         updatedProcessedStock = [newProcessedItem, ...prev.processedStock];
+      }
+
+      // Add expense if batch expenses were incurred
+      let updatedExpenses = prev.expenses;
+      let newCashInHand = prev.cashInHand;
+      if (batchExpenses > 0) {
+        const exp: Expense = {
+          id: `exp-${Date.now()}`,
+          date: today,
+          category: 'electricity',
+          description: `مصارف تولید بچ: ${name}`,
+          amount: batchExpenses,
+          paidBy: operatorName || 'مسئول فابریکه',
+        };
+        updatedExpenses = [exp, ...prev.expenses];
+        newCashInHand -= batchExpenses;
+        sbSyncExpense(exp);
       }
 
       return {
@@ -493,19 +576,34 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         processedStock: updatedProcessedStock,
         formulas: [newFormula, ...prev.formulas],
         productionBatches: produceBatchImmediately ? [newBatch, ...prev.productionBatches] : prev.productionBatches,
+        expenses: updatedExpenses,
+        cashInHand: newCashInHand,
       };
     });
+
+    if (processedItemToSync) {
+      sbSyncFormulaProduction(newFormula, newBatch, updatedRawMaterialsToSync, processedItemToSync);
+    }
 
     return { success: true };
   };
 
+  // DELETE FORMULA
+  const deleteFormula = (formulaId: string) => {
+    setDb(prev => ({
+      ...prev,
+      formulas: prev.formulas.filter(f => f.id !== formulaId),
+    }));
+    sbDeleteFormula(formulaId);
+  };
+
   // 3. RECORD SALE (DEDUCT PROCESSED STOCK, AUTO-UPDATE CUSTOMER, ADD CASH)
   const recordSale = (saleData: {
-    productId: string;
+    productId?: string;
     productName: string;
     customerId?: string;
     customerName: string;
-    customerPhone: string;
+    customerPhone?: string;
     unitType: UnitType;
     unitQuantity: number;
     salePricePerUnit: number;
@@ -515,11 +613,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const quantityKg = convertToKg(saleData.unitType, saleData.unitQuantity);
     
     // Check processed stock
-    const product = db.processedStock.find(p => p.id === saleData.productId);
+    let product = saleData.productId ? db.processedStock.find(p => p.id === saleData.productId) : undefined;
     if (!product) {
-      return { success: false, error: 'محصول انتخاب شده در گدام دانه پروسس شده یافت نشد.' };
+      product = db.processedStock.find(p => p.name.toLowerCase() === saleData.productName.trim().toLowerCase());
     }
-    if (product.stockKg < quantityKg) {
+
+    if (product && product.stockKg < quantityKg) {
       return { 
         success: false, 
         error: `موجودی دانه پروسس شده کافی نیست! موجودی فعلی: ${product.stockKg.toLocaleString()} کیلو، مقدار فروش: ${quantityKg.toLocaleString()} کیلو.` 
@@ -528,24 +627,54 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const totalAmount = saleData.unitQuantity * saleData.salePricePerUnit;
     const remainingAmount = Math.max(0, totalAmount - saleData.paidAmount);
-    const costRatePerKg = product.averageCostPerKg;
+    const costRatePerKg = product ? product.averageCostPerKg : 30;
     const totalCostOfGoods = costRatePerKg * quantityKg;
     const profit = totalAmount - totalCostOfGoods;
     const today = new Date().toISOString().split('T')[0];
     const saleId = `sale-${Date.now()}`;
 
+    const newSale: Sale = {
+      id: saleId,
+      date: today,
+      customerId: saleData.customerId || '',
+      customerName: saleData.customerName.trim(),
+      customerPhone: saleData.customerPhone?.trim(),
+      productId: product?.id || saleData.productId || '',
+      productName: saleData.productName.trim(),
+      unitType: saleData.unitType,
+      unitQuantity: saleData.unitQuantity,
+      quantityKg,
+      salePricePerUnit: saleData.salePricePerUnit,
+      totalAmount,
+      costRatePerKg,
+      totalCostOfGoods,
+      profit,
+      paidAmount: saleData.paidAmount,
+      remainingAmount,
+      notes: saleData.notes?.trim(),
+    };
+
+    let customerToSync: Customer | undefined;
+    let customerTxToSync: any | undefined;
+    let processedItemToSync: ProcessedStockItem | undefined;
+
     setDb(prev => {
       // 1. Deduct processed stock
-      const updatedProcessedStock = prev.processedStock.map(p => {
-        if (p.id === saleData.productId) {
-          return {
-            ...p,
-            stockKg: Math.max(0, p.stockKg - quantityKg),
-            lastUpdated: today,
-          };
-        }
-        return p;
-      });
+      let updatedProcessedStock = prev.processedStock;
+      if (product) {
+        updatedProcessedStock = prev.processedStock.map(p => {
+          if (p.id === product!.id) {
+            const updated = {
+              ...p,
+              stockKg: Math.max(0, p.stockKg - quantityKg),
+              lastUpdated: today,
+            };
+            processedItemToSync = updated;
+            return updated;
+          }
+          return p;
+        });
+      }
 
       // 2. Auto register/update customer
       let updatedCustomers = [...prev.customers];
@@ -561,16 +690,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         id: `ct-${Date.now()}`,
         date: today,
         type: 'sale' as const,
-        description: `فروش ${saleData.productName} (${saleData.unitQuantity} ${t[saleData.unitType]})`,
+        description: `فروش ${saleData.productName} (${saleData.unitQuantity} ${t[saleData.unitType] || saleData.unitType})`,
         amount: totalAmount,
         paidAmount: saleData.paidAmount,
         remainingAmount: remainingAmount,
       };
+      customerTxToSync = customerTransaction;
 
       if (existingCustIndex >= 0) {
         const existing = updatedCustomers[existingCustIndex];
         assignedCustId = existing.id;
-        updatedCustomers[existingCustIndex] = {
+        const updatedCust = {
           ...existing,
           phone: saleData.customerPhone || existing.phone,
           totalPurchasedAmount: existing.totalPurchasedAmount + totalAmount,
@@ -578,53 +708,38 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           balanceOwed: existing.balanceOwed + remainingAmount,
           transactions: [customerTransaction, ...existing.transactions],
         };
+        updatedCustomers[existingCustIndex] = updatedCust;
+        customerToSync = updatedCust;
       } else {
         assignedCustId = `cust-${Date.now()}`;
-        updatedCustomers.unshift({
+        const newCust: Customer = {
           id: assignedCustId,
           name: custName,
-          phone: saleData.customerPhone,
+          phone: saleData.customerPhone || '',
           totalPurchasedAmount: totalAmount,
           totalPaid: saleData.paidAmount,
           balanceOwed: remainingAmount,
           transactions: [customerTransaction],
           createdAt: today,
-        });
+        };
+        updatedCustomers.unshift(newCust);
+        customerToSync = newCust;
       }
 
-      // 3. Record sale
-      const newSale: Sale = {
-        id: saleId,
-        date: today,
-        customerId: assignedCustId || '',
-        customerName: custName,
-        customerPhone: saleData.customerPhone,
-        productId: saleData.productId,
-        productName: saleData.productName,
-        unitType: saleData.unitType,
-        unitQuantity: saleData.unitQuantity,
-        quantityKg,
-        salePricePerUnit: saleData.salePricePerUnit,
-        totalAmount,
-        costRatePerKg,
-        totalCostOfGoods,
-        profit,
-        paidAmount: saleData.paidAmount,
-        remainingAmount,
-        notes: saleData.notes,
-      };
-
-      // 4. Add paid amount to Cash in Hand
-      const updatedCash = prev.cashInHand + saleData.paidAmount;
+      newSale.customerId = assignedCustId;
 
       return {
         ...prev,
         processedStock: updatedProcessedStock,
         customers: updatedCustomers,
         sales: [newSale, ...prev.sales],
-        cashInHand: updatedCash,
+        cashInHand: prev.cashInHand + saleData.paidAmount,
       };
     });
+
+    if (customerToSync && customerTxToSync) {
+      sbSyncSale(newSale, customerToSync, customerTxToSync, processedItemToSync);
+    }
 
     return { success: true };
   };
@@ -653,12 +768,16 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
 
       const updatedCustomers = [...prev.customers];
-      updatedCustomers[custIndex] = {
+      const updatedCust = {
         ...cust,
         totalPaid: cust.totalPaid + actualReceived,
         balanceOwed: newRemaining,
         transactions: [transaction, ...cust.transactions],
       };
+      updatedCustomers[custIndex] = updatedCust;
+
+      // Supabase push
+      sbSyncCustomerPayment(updatedCust, transaction);
 
       return {
         ...prev,
@@ -674,6 +793,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ...prev,
       customers: prev.customers.filter(c => c.id !== customerId),
     }));
+    sbDeleteCustomer(customerId);
   };
 
   // 4. ADD EXPENSE (AUTOMATICALLY DEDUCT FROM CASH IN HAND)
@@ -690,6 +810,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       expenses: [newExpense, ...prev.expenses],
       cashInHand: prev.cashInHand - expense.amount,
     }));
+
+    sbSyncExpense(newExpense);
   };
 
   // DELETE EXPENSE
@@ -703,6 +825,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         cashInHand: prev.cashInHand + restoreCash,
       };
     });
+    sbDeleteExpense(id);
   };
 
   // BACKUP & RESTORE
@@ -724,23 +847,28 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const importDatabase = (jsonData: string): boolean => {
     try {
       const parsed = JSON.parse(jsonData);
-      if (parsed && parsed.rawMaterials && parsed.processedStock) {
+      if (parsed.rawMaterials && parsed.processedStock && parsed.suppliers && parsed.customers) {
         setDb(parsed);
+        seedInitialDataToSupabase(parsed);
         return true;
       }
+      return false;
     } catch (e) {
-      console.error('Import failed:', e);
+      console.error(e);
+      return false;
     }
-    return false;
   };
 
   const resetToDefaultData = () => {
-    if (window.confirm('آیا مطمئن هستید که می‌خواهید اطلاعات کارخانه را به حالت اولیه بازگردانید؟')) {
-      setDb(initialFactoryData);
-    }
+    setDb(initialFactoryData);
+    seedInitialDataToSupabase(initialFactoryData);
   };
 
-  const lowStockMaterials = db.rawMaterials.filter(r => r.stockKg <= lowStockThreshold);
+  // Low Stock Materials calculated per individual item threshold
+  const lowStockMaterials = db.rawMaterials.filter(
+    r => r.stockKg <= (r.lowStockThreshold !== undefined ? r.lowStockThreshold : lowStockThreshold)
+  );
+
   const getLocalizedName = (name: string) => getLocalizedItemName(name, lang);
   const getLocalizedCat = (cat: string) => getLocalizedCategory(cat, lang);
 
@@ -756,6 +884,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         logout,
         lowStockThreshold,
         setLowStockThreshold,
+        updateRawMaterialThreshold,
         lowStockMaterials,
         getLocalizedName,
         getLocalizedCat,
@@ -765,6 +894,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         settleSupplierPayment,
         deleteSupplier,
         createFormulaAndProduce,
+        deleteFormula,
         recordSale,
         receiveCustomerPayment,
         deleteCustomer,

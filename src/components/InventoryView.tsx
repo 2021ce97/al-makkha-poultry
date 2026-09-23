@@ -20,6 +20,7 @@ export const InventoryView: React.FC = () => {
     lang, 
     addRawMaterial, 
     deleteRawMaterial, 
+    updateRawMaterialThreshold,
     lowStockThreshold,
     getLocalizedName,
     getLocalizedCat
@@ -28,6 +29,9 @@ export const InventoryView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [materialToDelete, setMaterialToDelete] = useState<string | null>(null);
+  const [editingThresholdItem, setEditingThresholdItem] = useState<{ id: string; name: string; current: number } | null>(null);
+  const [newThresholdValue, setNewThresholdValue] = useState<number | ''>('');
 
   // Form State
   const [itemName, setItemName] = useState('');
@@ -328,12 +332,25 @@ export const InventoryView: React.FC = () => {
                       {totalVal.toLocaleString()} {t.currency}
                     </span>
                   </div>
-                  {item.lowStockThreshold !== undefined && (
-                    <div className="col-span-2 mt-1 flex items-center justify-between text-[10px]">
-                      <span className="text-slate-500">حد هشدار سفارشی:</span>
-                      <span className="text-rose-700 font-mono">{item.lowStockThreshold.toLocaleString()} {t.kilo}</span>
-                    </div>
-                  )}
+                  <div className="col-span-2 mt-1 flex items-center justify-between text-[11px] pt-1.5 border-t border-slate-200/60">
+                    <span className="text-slate-500">حد هشدار انفرادی:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingThresholdItem({
+                          id: item.id,
+                          name: getLocalizedName(item.name),
+                          current: item.lowStockThreshold ?? lowStockThreshold
+                        });
+                        setNewThresholdValue(item.lowStockThreshold ?? lowStockThreshold);
+                      }}
+                      className="text-amber-700 font-mono hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+                      title="تنظیم حد هشدار این قلم"
+                    >
+                      <span>{(item.lowStockThreshold ?? lowStockThreshold).toLocaleString()} {t.kilo}</span>
+                      <span className="text-[10px] text-slate-400">✎</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Supplier Info */}
@@ -356,12 +373,8 @@ export const InventoryView: React.FC = () => {
                 <span>{item.dateAdded}</span>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm(t.confirmDelete)) {
-                      deleteRawMaterial(item.id);
-                    }
-                  }}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                  onClick={() => setMaterialToDelete(item.id)}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                   title={t.delete}
                 >
                   <Trash2 className="w-4 h-4" />
@@ -616,18 +629,104 @@ export const InventoryView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold"
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md shadow-amber-600/25"
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md shadow-amber-600/25 cursor-pointer"
                 >
                   {t.save}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Edit Threshold Modal */}
+      {editingThresholdItem && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200">
+            <h3 className="text-sm font-bold text-slate-900 mb-2">
+              تنظیم انفرادی حد هشدار موجودی کم
+            </h3>
+            <p className="text-xs text-slate-600 mb-4">
+              ماده خام: <strong>{editingThresholdItem.name}</strong>
+            </p>
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                حد آستانه هشدار (کیلوگرم)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={newThresholdValue}
+                onChange={(e) => setNewThresholdValue(e.target.value ? Number(e.target.value) : '')}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 font-mono focus:outline-none focus:border-amber-600 shadow-2xs"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">
+                هنگامی که موجودی فقط این قلم به کمتر از این مقدار برسد، هشدار داده خواهد شد.
+              </span>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setEditingThresholdItem(null)}
+                className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                {t.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (newThresholdValue !== '') {
+                    updateRawMaterialThreshold(editingThresholdItem.id, Number(newThresholdValue));
+                    setEditingThresholdItem(null);
+                  }
+                }}
+                className="flex-1 py-2 rounded-xl bg-amber-600 text-xs font-bold text-white hover:bg-amber-700 shadow-xs cursor-pointer"
+              >
+                {t.save}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-app Confirmation Modal for Raw Material Deletion */}
+      {materialToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200 text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-2">
+              {t.delete}
+            </h3>
+            <p className="text-xs text-slate-600 mb-6">
+              {t.confirmDelete}
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setMaterialToDelete(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                {t.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteRawMaterial(materialToDelete);
+                  setMaterialToDelete(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 text-xs font-bold text-white hover:bg-rose-700 transition-colors cursor-pointer"
+              >
+                {t.delete}
+              </button>
+            </div>
           </div>
         </div>
       )}

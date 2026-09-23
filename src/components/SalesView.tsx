@@ -39,9 +39,9 @@ export const SalesView: React.FC = () => {
   const [customerPhone, setCustomerPhone] = useState('');
 
   const [unitType, setUnitType] = useState<UnitType>('bag');
-  const [unitQuantity, setUnitQuantity] = useState<number | ''>(50);
-  const [salePricePerUnit, setSalePricePerUnit] = useState<number | ''>(4500); // 4500 per bag
-  const [paidAmount, setPaidAmount] = useState<number | ''>(200000);
+  const [unitQuantity, setUnitQuantity] = useState<number | ''>('');
+  const [salePricePerUnit, setSalePricePerUnit] = useState<number | ''>('');
+  const [paidAmount, setPaidAmount] = useState<number | ''>('');
   const [notes, setNotes] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -89,9 +89,9 @@ export const SalesView: React.FC = () => {
     setCustomerName('');
     setCustomerPhone('');
     setUnitType('bag');
-    setUnitQuantity(50);
-    setSalePricePerUnit(4500);
-    setPaidAmount(200000);
+    setUnitQuantity('');
+    setSalePricePerUnit('');
+    setPaidAmount('');
     setNotes('');
     setErrorMsg('');
     setIsModalOpen(true);
@@ -139,12 +139,14 @@ export const SalesView: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  // Filter sales
+  // Filter sales - search by customer name, phone number, and invoice number (id)
+  const term = searchTerm.trim().toLowerCase();
   const filteredSales = db.sales.filter(s => {
-    const matchesSearch = 
-      s.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (s.notes && s.notes.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = !term || (
+      s.customerName.toLowerCase().includes(term) ||
+      (s.customerPhone && s.customerPhone.toLowerCase().includes(term)) ||
+      s.id.toLowerCase().includes(term)
+    );
     
     const matchesProduct = selectedProductFilter === 'all' || s.productName.toLowerCase().includes(selectedProductFilter.toLowerCase());
     
@@ -182,7 +184,6 @@ export const SalesView: React.FC = () => {
             type="button"
             onClick={() => setShowCostRate(!showCostRate)}
             className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-            title="نمایش / مخفی کردن نرخ تمام‌شد"
           >
             {showCostRate ? <EyeOff className="w-4 h-4 text-slate-500" /> : <Eye className="w-4 h-4 text-slate-500" />}
             <span className="hidden sm:inline">نرخ تمام‌شد</span>
@@ -512,6 +513,19 @@ export const SalesView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Automatic Cost of Goods Indicator */}
+              <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <span className="text-slate-700 font-bold flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-amber-700" />
+                  <span>{t.costRateInfo}</span>
+                </span>
+                <span className="font-mono font-bold text-amber-900">
+                  {costRatePerKg.toFixed(2)} {t.currency}/kg
+                  {unitType === 'bag' && ` (معادل ${(costRatePerKg * 50).toFixed(0)} ${t.currency} فی بوجی)`}
+                  {unitType === 'ton' && ` (معادل ${(costRatePerKg * 1000).toLocaleString()} ${t.currency} فی تن)`}
+                </span>
+              </div>
+
               {/* Price and Paid Amount */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -730,6 +744,10 @@ export const SalesView: React.FC = () => {
                 <span>•</span>
                 <span>{t.companyPhoneLabel}</span>
                 <strong className="font-mono text-amber-700 font-bold" dir="ltr">0780 001 923</strong>
+              </div>
+
+              <div className="mt-2 text-center text-[10px] font-mono text-slate-400 print:text-black">
+                Developed by: rayan-tech-solutions.tech
               </div>
             </div>
           </div>
