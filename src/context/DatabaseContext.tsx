@@ -103,6 +103,51 @@ interface DatabaseContextType {
 
 const DatabaseContext = createContext<DatabaseContextType | undefined>(undefined);
 
+type StateCollection = Exclude<keyof DatabaseState, 'cashInHand'>;
+
+/**
+ * Earlier sync code could leave an entire related table empty (notably
+ * production batches and supplier transactions) while the browser still had
+ * the records in its offline backup.  Recover only fully empty collections;
+ * populated remote collections remain the source of truth and are never
+ * overwritten by an older browser copy.
+ */
+function recoverEmptyRemoteCollections(remote: DatabaseState, local: DatabaseState): DatabaseState {
+  const collections: StateCollection[] = [
+    'rawMaterials',
+    'processedStock',
+    'suppliers',
+    'customers',
+    'formulas',
+    'productionBatches',
+    'sales',
+    'expenses',
+  ];
+
+  const recovered = { ...remote };
+  for (const collection of collections) {
+    if (remote[collection].length === 0 && local[collection].length > 0) {
+      Object.assign(recovered, { [collection]: local[collection] });
+    }
+  }
+
+  // Transactions are nested in suppliers/customers in the app state, so
+  // recover an empty transaction table without replacing the remote master
+  // supplier/customer records.
+  const remoteHasNoSupplierTransactions = remote.suppliers.every(s => s.transactions.length === 0);
+  const localHasSupplierTransactions = local.suppliers.some(s => s.transactions.length > 0);
+  if (remoteHasNoSupplierTransactions && localHasSupplierTransactions) {
+    recovered.suppliers = remote.suppliers.map(supplier => {
+      const localSupplier = local.suppliers.find(localItem =>
+        localItem.id === supplier.id || localItem.name.toLowerCase() === supplier.name.toLowerCase()
+      );
+      return localSupplier ? { ...supplier, transactions: localSupplier.transactions } : supplier;
+    });
+  }
+
+  return recovered;
+}
+
 export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [lang, setLangState] = useState<Language>(() => {
     const saved = localStorage.getItem(LANG_STORAGE_KEY);
@@ -218,9 +263,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     loadStateFromSupabase().then(result => {
       if (!isMounted) return;
       if (result?.hasData) {
+        const hydratedState = recoverEmptyRemoteCollections(result.state, db);
         setIsSupabaseConnected(true);
+        // Keep the remote hash here. If an empty collection was recovered
+        // from the offline backup, the persistence effect detects the
+        // difference and uploads that missing collection exactly once.
         lastSyncedState.current = JSON.stringify(result.state);
-        setDb(result.state);
+        setDb(hydratedState);
         isInitialLoadComplete = true;
         isRemoteStateReady.current = true;
         setIsDatabaseLoading(false);
