@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const { user, lang, t } = useDatabase();
+  const { user, lang, t, isAuthLoading, isDatabaseLoading } = useDatabase();
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -38,7 +38,15 @@ const AppContent: React.FC = () => {
     document.documentElement.setAttribute('lang', lang);
   }, [lang]);
 
-  // Auth Guard: If not logged in, display beautiful login screen
+  if (isAuthLoading || (user && isDatabaseLoading)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-600 text-sm">
+        {isAuthLoading ? 'Checking secure session…' : 'Loading data from Supabase…'}
+      </div>
+    );
+  }
+
+  // Auth Guard: only a valid Supabase session can open system data.
   if (!user) {
     return <LoginPage />;
   }

@@ -37,6 +37,50 @@ export interface SupabaseLoadResult {
   hasData: boolean;
 }
 
+const DEFAULT_CASH_IN_HAND = 435000;
+
+/**
+ * Cash is a value in its own right, rather than something that can safely be
+ * reconstructed from a partial transaction history.  The table was added
+ * after the first version of the app, so a missing table is deliberately
+ * treated as a backwards-compatible fallback while the SQL migration is run.
+ */
+async function loadCashInHand(): Promise<number | null> {
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from('factory_state')
+    .select('cash_in_hand')
+    .eq('id', 'default')
+    .maybeSingle();
+
+  if (error) {
+    // The rest of the business data must remain available on databases that
+    // have not yet run the migration.
+    console.warn('factory_state is not available yet:', error.message);
+    return null;
+  }
+
+  const value = Number(data?.cash_in_hand);
+  return Number.isFinite(value) ? value : null;
+}
+
+async function saveCashInHand(cashInHand: number): Promise<void> {
+  if (!supabase) return;
+
+  const { error } = await supabase.from('factory_state').upsert({
+    id: 'default',
+    cash_in_hand: cashInHand,
+    updated_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    // This is optional until the included migration is installed.  Do not
+    // prevent the rest of the state from being saved in the meantime.
+    console.warn('factory_state could not be saved:', error.message);
+  }
+}
+
 /**
  * Loads the complete database state from Supabase tables.
  */
@@ -213,13 +257,7 @@ export async function loadStateFromSupabase(): Promise<SupabaseLoadResult | null
       notes: b.notes || undefined,
     }));
 
-    // Calculate cash in hand from sales received minus expenses paid
-    const totalSalesCash = sales.reduce((acc, s) => acc + s.paidAmount, 0);
-    const totalCustomerDebtReceived = customerTransactions
-      .filter(tx => tx.type === 'payment_received')
-      .reduce((acc, tx) => acc + tx.paidAmount, 0);
-    const totalExpensesCash = expenses.reduce((acc, e) => acc + e.amount, 0);
-    const calculatedCash = 1850000 + (totalSalesCash + totalCustomerDebtReceived) - totalExpensesCash;
+    const persistedCash = await loadCashInHand();
 
     const hasData = [
       rawMaterials,
@@ -242,7 +280,9 @@ export async function loadStateFromSupabase(): Promise<SupabaseLoadResult | null
         productionBatches,
         sales,
         expenses,
-        cashInHand: calculatedCash,
+        // Old installations did not persist cash separately.  Keep a
+        // sensible value until the included factory_state migration runs.
+        cashInHand: persistedCash ?? DEFAULT_CASH_IN_HAND,
       },
     };
   } catch (err) {
@@ -258,24 +298,10 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
   if (!supabase) return false;
 
   return queueSync(async () => {
-    // 1. Raw Materials
-    if (state.rawMaterials.length > 0) {
-      const rows = state.rawMaterials.map(rm => ({
-        id: rm.id,
-        name: rm.name,
-        category: rm.category,
-        stock_kg: rm.stockKg,
-        unit_price: rm.unitPrice,
-        supplier_id: rm.supplierId || null,
-        supplier_name: rm.supplierName || null,
-        date_added: rm.dateAdded,
-        notes: rm.notes || null,
-        low_stock_threshold: rm.lowStockThreshold || 5000,
-      }));
-      await checked(supabase.from('raw_materials').upsert(rows), 'raw_materials seed');
-    }
-
-    // 2. Suppliers & Transactions
+    // Parents are always written before their dependants. This matters when
+    // foreign keys are enabled and fixes writes that previously failed only
+    // after a page refresh.
+    // 1. Suppliers & Transactions
     if (state.suppliers.length > 0) {
       const supRows = state.suppliers.map(s => ({
         id: s.id,
@@ -306,7 +332,24 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
       }
     }
 
-    // 3. Customers & Transactions
+    // 2. Raw Materials (may reference a supplier)
+    if (state.rawMaterials.length > 0) {
+      const rows = state.rawMaterials.map(rm => ({
+        id: rm.id,
+        name: rm.name,
+        category: rm.category,
+        stock_kg: rm.stockKg,
+        unit_price: rm.unitPrice,
+        supplier_id: rm.supplierId || null,
+        supplier_name: rm.supplierName || null,
+        date_added: rm.dateAdded,
+        notes: rm.notes || null,
+        low_stock_threshold: rm.lowStockThreshold || 5000,
+      }));
+      await checked(supabase.from('raw_materials').upsert(rows), 'raw_materials seed');
+    }
+
+    // 3. Customers & Transactions (sales reference customers)
     if (state.customers.length > 0) {
       const custRows = state.customers.map(c => ({
         id: c.id,
@@ -337,7 +380,36 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
       }
     }
 
-    // 4. Processed Stock
+    // 4. Formulas (processed stock and batches may reference formulas)
+    if (state.formulas.length > 0) {
+      const formRows = state.formulas.map(f => ({
+        id: f.id,
+        name: f.name,
+        description: f.description || null,
+        ingredients: f.ingredients,
+        operator_name: null,
+        date_created: f.createdDate,
+      }));
+      await checked(supabase.from('formulas').upsert(formRows), 'formulas seed');
+    }
+
+    // 5. Production Batches
+    if (state.productionBatches.length > 0) {
+      const batchRows = state.productionBatches.map(b => ({
+        id: b.id,
+        formula_id: b.formulaId,
+        formula_name: b.formulaName,
+        date: b.date,
+        total_weight_kg: b.totalWeightKg,
+        cost_per_kg: b.costPerKg,
+        total_cost: b.totalCost,
+        operator_name: b.operatorName || null,
+        notes: b.notes || null,
+      }));
+      await checked(supabase.from('production_batches').upsert(batchRows), 'production_batches seed');
+    }
+
+    // 6. Processed Stock
     if (state.processedStock.length > 0) {
       const procRows = state.processedStock.map(p => ({
         id: p.id,
@@ -350,7 +422,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
       await checked(supabase.from('processed_stock').upsert(procRows), 'processed_stock seed');
     }
 
-    // 5. Sales
+    // 7. Sales
     if (state.sales.length > 0) {
       const saleRows = state.sales.map(s => ({
         id: s.id,
@@ -374,7 +446,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
       await checked(supabase.from('sales').upsert(saleRows), 'sales seed');
     }
 
-    // 6. Expenses
+    // 8. Expenses
     if (state.expenses.length > 0) {
       const expRows = state.expenses.map(e => ({
         id: e.id,
@@ -388,30 +460,7 @@ export async function seedInitialDataToSupabase(state: DatabaseState): Promise<b
       await checked(supabase.from('expenses').upsert(expRows), 'expenses seed');
     }
 
-    // 7. Formulas
-    if (state.formulas.length > 0) {
-      const formRows = state.formulas.map(f => ({
-        id: f.id,
-        name: f.name,
-        description: f.description || null,
-        ingredients: f.ingredients,
-        operator_name: null,
-        date_created: f.createdDate,
-      }));
-      await checked(supabase.from('formulas').upsert(formRows), 'formulas seed');
-    }
-
-    // 8. Production Batches
-    if (state.productionBatches.length > 0) {
-      const batchRows = state.productionBatches.map(b => ({
-        id: b.id,
-        date: b.date,
-        formula_name: b.formulaName,
-        total_weight_kg: b.totalWeightKg,
-        operator_name: b.operatorName || null,
-      }));
-      await checked(supabase.from('production_batches').upsert(batchRows), 'production_batches seed');
-    }
+    await saveCashInHand(state.cashInHand);
   }).then(() => true).catch(err => {
     console.error('Error seeding data to Supabase:', err);
     return false;
@@ -430,7 +479,18 @@ export async function sbSyncSale(
 ) {
   if (!supabase) return;
   try {
-    // 1. Insert sale record
+    // Write the customer before the sale when database foreign keys are used.
+    await checked(supabase.from('customers').upsert({
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone || null,
+      address: customer.address || null,
+      total_purchased_amount: customer.totalPurchasedAmount,
+      total_paid: customer.totalPaid,
+      balance_owed: customer.balanceOwed,
+      created_at: customer.createdAt,
+    }), 'customers sync');
+
     await checked(supabase.from('sales').upsert({
       id: sale.id,
       date: sale.date,
@@ -451,19 +511,7 @@ export async function sbSyncSale(
       notes: sale.notes || null,
     }), 'sales sync');
 
-    // 2. Upsert customer
-    await checked(supabase.from('customers').upsert({
-      id: customer.id,
-      name: customer.name,
-      phone: customer.phone || null,
-      address: customer.address || null,
-      total_purchased_amount: customer.totalPurchasedAmount,
-      total_paid: customer.totalPaid,
-      balance_owed: customer.balanceOwed,
-      created_at: customer.createdAt,
-    }), 'customers sync');
-
-    // 3. Insert customer transaction
+    // Insert customer transaction after its customer.
     await checked(supabase.from('customer_transactions').upsert({
       id: customerTx.id,
       customer_id: customer.id,
@@ -525,12 +573,14 @@ export async function sbSyncCustomerPayment(
 
 export async function sbDeleteCustomer(customerId: string) {
   if (!supabase) return;
-  try {
-    await checked(supabase.from('customer_transactions').delete().eq('customer_id', customerId), 'customer_transactions delete');
-    await checked(supabase.from('customers').delete().eq('id', customerId), 'customers delete');
-  } catch (err) {
-    console.error('Supabase error deleting customer:', err);
-  }
+  return queueSync(async () => {
+    try {
+      await checked(supabase.from('customer_transactions').delete().eq('customer_id', customerId), 'customer_transactions delete');
+      await checked(supabase.from('customers').delete().eq('id', customerId), 'customers delete');
+    } catch (err) {
+      console.error('Supabase error deleting customer:', err);
+    }
+  });
 }
 
 export async function sbSyncRawMaterial(
@@ -540,19 +590,6 @@ export async function sbSyncRawMaterial(
 ) {
   if (!supabase) return;
   try {
-    await checked(supabase.from('raw_materials').upsert({
-      id: item.id,
-      name: item.name,
-      category: item.category,
-      stock_kg: item.stockKg,
-      unit_price: item.unitPrice,
-      supplier_id: item.supplierId || null,
-      supplier_name: item.supplierName || null,
-      date_added: item.dateAdded,
-      notes: item.notes || null,
-      low_stock_threshold: item.lowStockThreshold || 5000,
-    }), 'raw_materials sync');
-
     if (supplier) {
       await checked(supabase.from('suppliers').upsert({
         id: supplier.id,
@@ -565,6 +602,19 @@ export async function sbSyncRawMaterial(
         created_at: supplier.createdAt,
       }), 'suppliers sync');
     }
+
+    await checked(supabase.from('raw_materials').upsert({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      stock_kg: item.stockKg,
+      unit_price: item.unitPrice,
+      supplier_id: item.supplierId || null,
+      supplier_name: item.supplierName || null,
+      date_added: item.dateAdded,
+      notes: item.notes || null,
+      low_stock_threshold: item.lowStockThreshold || 5000,
+    }), 'raw_materials sync');
 
     if (supplierTx && supplier) {
       await checked(supabase.from('supplier_transactions').upsert({
@@ -585,11 +635,13 @@ export async function sbSyncRawMaterial(
 
 export async function sbDeleteRawMaterial(id: string) {
   if (!supabase) return;
-  try {
-    await checked(supabase.from('raw_materials').delete().eq('id', id), 'raw_materials delete');
-  } catch (err) {
-    console.error('Supabase error deleting raw material:', err);
-  }
+  return queueSync(async () => {
+    try {
+      await checked(supabase.from('raw_materials').delete().eq('id', id), 'raw_materials delete');
+    } catch (err) {
+      console.error('Supabase error deleting raw material:', err);
+    }
+  });
 }
 
 export async function sbSyncSupplierPayment(
@@ -626,12 +678,14 @@ export async function sbSyncSupplierPayment(
 
 export async function sbDeleteSupplier(supplierId: string) {
   if (!supabase) return;
-  try {
-    await checked(supabase.from('supplier_transactions').delete().eq('supplier_id', supplierId), 'supplier_transactions delete');
-    await checked(supabase.from('suppliers').delete().eq('id', supplierId), 'suppliers delete');
-  } catch (err) {
-    console.error('Supabase error deleting supplier:', err);
-  }
+  return queueSync(async () => {
+    try {
+      await checked(supabase.from('supplier_transactions').delete().eq('supplier_id', supplierId), 'supplier_transactions delete');
+      await checked(supabase.from('suppliers').delete().eq('id', supplierId), 'suppliers delete');
+    } catch (err) {
+      console.error('Supabase error deleting supplier:', err);
+    }
+  });
 }
 
 export async function sbSyncExpense(expense: Expense) {
@@ -653,11 +707,13 @@ export async function sbSyncExpense(expense: Expense) {
 
 export async function sbDeleteExpense(id: string) {
   if (!supabase) return;
-  try {
-    await checked(supabase.from('expenses').delete().eq('id', id), 'expenses delete');
-  } catch (err) {
-    console.error('Supabase error deleting expense:', err);
-  }
+  return queueSync(async () => {
+    try {
+      await checked(supabase.from('expenses').delete().eq('id', id), 'expenses delete');
+    } catch (err) {
+      console.error('Supabase error deleting expense:', err);
+    }
+  });
 }
 
 export async function sbSyncFormulaProduction(
@@ -681,10 +737,14 @@ export async function sbSyncFormulaProduction(
     // 2. Production Batch
     await checked(supabase.from('production_batches').upsert({
       id: batch.id,
+      formula_id: batch.formulaId,
       date: batch.date,
       formula_name: batch.formulaName,
       total_weight_kg: batch.totalWeightKg,
+      cost_per_kg: batch.costPerKg,
+      total_cost: batch.totalCost,
       operator_name: batch.operatorName || null,
+      notes: batch.notes || null,
     }), 'production_batches sync');
 
     // 3. Processed Stock
@@ -708,9 +768,11 @@ export async function sbSyncFormulaProduction(
 
 export async function sbDeleteFormula(formulaId: string) {
   if (!supabase) return;
-  try {
-    await checked(supabase.from('formulas').delete().eq('id', formulaId), 'formulas delete');
-  } catch (err) {
-    console.error('Supabase error deleting formula:', err);
-  }
+  return queueSync(async () => {
+    try {
+      await checked(supabase.from('formulas').delete().eq('id', formulaId), 'formulas delete');
+    } catch (err) {
+      console.error('Supabase error deleting formula:', err);
+    }
+  });
 }

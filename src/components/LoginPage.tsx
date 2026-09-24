@@ -18,8 +18,9 @@ export const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!email || !password) {
@@ -27,9 +28,11 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
-    const success = login(email, password);
-    if (!success) {
-      setError(t.invalidCredentials);
+    setIsSubmitting(true);
+    const result = await login(email, password);
+    setIsSubmitting(false);
+    if (!result.success) {
+      setError(result.error || t.invalidCredentials);
     }
   };
 
@@ -159,9 +162,10 @@ export const LoginPage: React.FC = () => {
 
               <button
                 type="submit"
-                className="w-full mt-2 py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-md shadow-amber-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                disabled={isSubmitting}
+                className="w-full mt-2 py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 disabled:cursor-wait text-white font-bold text-sm shadow-md shadow-amber-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
               >
-                <span>{t.loginBtn}</span>
+                <span>{isSubmitting ? 'Signing in…' : t.loginBtn}</span>
                 <ArrowIcon className="w-4 h-4" />
               </button>
             </form>

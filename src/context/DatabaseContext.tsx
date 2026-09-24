@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { 
   DatabaseState, 
   Language, 
@@ -25,22 +25,15 @@ import { supabase } from '../lib/supabase';
 import { 
   loadStateFromSupabase, 
   seedInitialDataToSupabase,
-  sbSyncSale,
-  sbSyncCustomerPayment,
   sbDeleteCustomer,
-  sbSyncRawMaterial,
   sbDeleteRawMaterial,
-  sbSyncSupplierPayment,
   sbDeleteSupplier,
-  sbSyncExpense,
   sbDeleteExpense,
-  sbSyncFormulaProduction,
   sbDeleteFormula
 } from '../lib/supabaseSync';
 
 const STORAGE_KEY = 'mahir_poultry_feed_db_v1';
 const LANG_STORAGE_KEY = 'mahir_poultry_feed_lang';
-const AUTH_STORAGE_KEY = 'mahir_poultry_feed_auth_user';
 const THRESHOLD_STORAGE_KEY = 'mahir_poultry_feed_threshold';
 
 interface DatabaseContextType {
@@ -50,8 +43,10 @@ interface DatabaseContextType {
   setLang: (lang: Language) => void;
   // Auth
   user: AuthUser | null;
-  login: (email: string, pass: string) => boolean;
-  logout: () => void;
+  isAuthLoading: boolean;
+  isDatabaseLoading: boolean;
+  login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
   // Low Stock Notification Threshold
   lowStockThreshold: number;
   setLowStockThreshold: (threshold: number) => void;
@@ -114,20 +109,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return (saved === 'fa' || saved === 'ps' || saved === 'en') ? (saved as Language) : 'fa';
   });
 
-  // Authentication State with credentials Rayan@poletry.af / Rayan6789
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    try {
-      const saved = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return null;
-  });
+  // Authentication is managed by Supabase Auth. A local-only login cannot
+  // validate users created in the Supabase dashboard.
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(Boolean(supabase));
+  const [isDatabaseLoading, setIsDatabaseLoading] = useState(Boolean(supabase));
 
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
+  const isRemoteStateReady = useRef(false);
+  const lastSyncedState = useRef<string | null>(null);
 
   // User-defined Low Stock Threshold
   const [lowStockThreshold, setLowStockThresholdState] = useState<number>(() => {
@@ -165,33 +155,89 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return initialFactoryData;
   });
 
-  // Initial Supabase Load & Real-time Subscription
+  const toAuthUser = (authUser: {
+    email?: string;
+    user_metadata?: Record<string, unknown>;
+    app_metadata?: Record<string, unknown>;
+  }): AuthUser => {
+    const userMetadata = authUser.user_metadata || {};
+    const appMetadata = authUser.app_metadata || {};
+    const email = authUser.email || '';
+    return {
+      email,
+      name: String(userMetadata.full_name || userMetadata.name || email),
+      // Dashboard-created users can store this in either metadata location.
+      role: String(userMetadata.role || appMetadata.role || 'User'),
+      loginTime: new Date().toISOString(),
+    };
+  };
+
+  // Restore a saved Supabase session and react to login/logout events.
   useEffect(() => {
     if (!supabase) {
+      setIsAuthLoading(false);
+      setIsDatabaseLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!isMounted) return;
+      if (error) console.error('Supabase session check failed:', error.message);
+      setUser(data.session?.user ? toAuthUser(data.session.user) : null);
+      setIsAuthLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+      setUser(session?.user ? toAuthUser(session.user) : null);
+      setIsAuthLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  // Initial Supabase Load & Real-time Subscription
+  useEffect(() => {
+    if (!supabase || isAuthLoading || !user) {
       setIsSupabaseConnected(false);
+      if (!isAuthLoading) setIsDatabaseLoading(false);
       return;
     }
 
     let isMounted = true;
     let isInitialLoadComplete = false;
+    isRemoteStateReady.current = false;
+    lastSyncedState.current = null;
+    setIsDatabaseLoading(true);
 
     // 1. Fetch live tables from Supabase
     loadStateFromSupabase().then(result => {
       if (!isMounted) return;
       if (result?.hasData) {
         setIsSupabaseConnected(true);
+        lastSyncedState.current = JSON.stringify(result.state);
         setDb(result.state);
         isInitialLoadComplete = true;
+        isRemoteStateReady.current = true;
+        setIsDatabaseLoading(false);
       } else if (result) {
         setIsSupabaseConnected(true);
         // Never replace a local backup with factory data when the remote database is empty.
         seedInitialDataToSupabase(db).finally(() => {
+          lastSyncedState.current = JSON.stringify(db);
           isInitialLoadComplete = true;
+          isRemoteStateReady.current = true;
+          if (isMounted) setIsDatabaseLoading(false);
         });
       } else {
         setIsSupabaseConnected(false);
         console.error('Supabase hydration failed; keeping the local database backup.');
         isInitialLoadComplete = true;
+        setIsDatabaseLoading(false);
       }
     });
 
@@ -206,6 +252,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           loadStateFromSupabase().then(result => {
             if (isMounted && result?.hasData) {
               setIsSupabaseConnected(true);
+              lastSyncedState.current = JSON.stringify(result.state);
               setDb(result.state);
             }
           });
@@ -217,7 +264,28 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [isAuthLoading, user?.email]);
+
+  // Persist each completed state change as one ordered snapshot.  The old
+  // code fired independent writes while React was still calculating state,
+  // so customer/supplier records and their linked transactions could be
+  // missing after a new login.  The sync helper serializes this snapshot and
+  // writes parents before records that reference them.
+  useEffect(() => {
+    if (!supabase || !isRemoteStateReady.current) return;
+
+    const stateHash = JSON.stringify(db);
+    if (lastSyncedState.current === stateHash) return;
+
+    void seedInitialDataToSupabase(db).then(saved => {
+      if (saved) {
+        lastSyncedState.current = stateHash;
+        setIsSupabaseConnected(true);
+      } else {
+        setIsSupabaseConnected(false);
+      }
+    });
+  }, [db]);
 
   // Keep localStorage in sync as offline backup
   useEffect(() => {
@@ -242,36 +310,24 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const t = translations[lang];
 
-  const login = (emailInput: string, passwordInput: string): boolean => {
-    const cleanEmail = emailInput.trim().toLowerCase();
-    const cleanPass = passwordInput.trim();
-    if (
-      (cleanEmail === 'rayan@poletry.af' || cleanEmail === 'rayan' || cleanEmail === 'rayan@poultry.af') &&
-      cleanPass === 'Rayan6789'
-    ) {
-      const authUser: AuthUser = {
-        email: 'Rayan@poletry.af',
-        name: 'ریان (Rayan)',
-        role: 'مدیر عمومی کارخانه (Director)',
-        loginTime: new Date().toISOString(),
-      };
-      setUser(authUser);
-      try {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
-      } catch (err) {
-        console.error(err);
-      }
-      return true;
+  const login = async (emailInput: string, passwordInput: string) => {
+    if (!supabase) {
+      return { success: false, error: 'Supabase is not configured. Add the VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY variables.' };
     }
-    return false;
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: emailInput.trim(),
+      password: passwordInput,
+    });
+    return error ? { success: false, error: error.message } : { success: true };
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUser(null);
-    try {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-    } catch (err) {
-      console.error(err);
+    isRemoteStateReady.current = false;
+    if (supabase) {
+      const { error } = await supabase.auth.signOut();
+      if (error) console.error('Supabase logout failed:', error.message);
     }
   };
 
@@ -305,9 +361,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       dateAdded: today,
     };
 
-    let updatedSupplierToSync: Supplier | undefined;
-    let supplierTxToSync: any | undefined;
-
     setDb(prev => {
       let updatedSuppliers = [...prev.suppliers];
       let assignedSupplierId = item.supplierId;
@@ -327,8 +380,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           paidAmount: paidAmount,
           remainingAmount: remaining,
         };
-        supplierTxToSync = transaction;
-
         if (existingSupIndex >= 0) {
           const sup = updatedSuppliers[existingSupIndex];
           assignedSupplierId = sup.id;
@@ -341,7 +392,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             transactions: [transaction, ...sup.transactions],
           };
           updatedSuppliers[existingSupIndex] = updatedSup;
-          updatedSupplierToSync = updatedSup;
         } else {
           assignedSupplierId = `sup-${Date.now()}`;
           const newSup: Supplier = {
@@ -355,7 +405,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             createdAt: today,
           };
           updatedSuppliers.unshift(newSup);
-          updatedSupplierToSync = newSup;
         }
       }
 
@@ -369,8 +418,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
     });
 
-    // Supabase push
-    sbSyncRawMaterial(newItem, updatedSupplierToSync, supplierTxToSync);
   };
 
   // UPDATE RAW MATERIAL THRESHOLD PER ITEM
@@ -379,7 +426,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const updatedRaw = prev.rawMaterials.map(rm => {
         if (rm.id === id) {
           const updated = { ...rm, lowStockThreshold: threshold };
-          sbSyncRawMaterial(updated);
           return updated;
         }
         return rm;
@@ -431,9 +477,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         transactions: [transaction, ...sup.transactions],
       };
       updatedSuppliers[supIndex] = updatedSup;
-
-      // Supabase push
-      sbSyncSupplierPayment(updatedSup, transaction);
 
       return {
         ...prev,
@@ -522,9 +565,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       notes: `پروسس خودکار: ${name} (${totalWeight.toLocaleString()} کیلو)${batchExpenses > 0 ? ` • مصارف جانبی: ${batchExpenses.toLocaleString()} ${t.currency}` : ''}`,
     };
 
-    let processedItemToSync: ProcessedStockItem | undefined;
-    let updatedRawMaterialsToSync: RawMaterialItem[] = [];
-
     setDb(prev => {
       // Deduct raw materials
       const updatedRaw = prev.rawMaterials.map(rm => {
@@ -534,7 +574,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             ...rm,
             stockKg: Math.max(0, rm.stockKg - used.weightKg),
           };
-          updatedRawMaterialsToSync.push(updated);
           return updated;
         }
         return rm;
@@ -559,7 +598,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           averageCostPerKg: Math.round(newAvgCost * 100) / 100,
           lastUpdated: today,
         };
-        processedItemToSync = updatedItem;
         updatedProcessedStock = [...prev.processedStock];
         updatedProcessedStock[existingProcessedIndex] = updatedItem;
       } else {
@@ -571,7 +609,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           averageCostPerKg: costPerKg,
           lastUpdated: today,
         };
-        processedItemToSync = newProcessedItem;
         updatedProcessedStock = [newProcessedItem, ...prev.processedStock];
       }
 
@@ -589,7 +626,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         };
         updatedExpenses = [exp, ...prev.expenses];
         newCashInHand -= batchExpenses;
-        sbSyncExpense(exp);
       }
 
       return {
@@ -602,10 +638,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         cashInHand: newCashInHand,
       };
     });
-
-    if (processedItemToSync) {
-      sbSyncFormulaProduction(newFormula, newBatch, updatedRawMaterialsToSync, processedItemToSync);
-    }
 
     return { success: true };
   };
@@ -676,10 +708,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       notes: saleData.notes?.trim(),
     };
 
-    let customerToSync: Customer | undefined;
-    let customerTxToSync: any | undefined;
-    let processedItemToSync: ProcessedStockItem | undefined;
-
     setDb(prev => {
       // 1. Deduct processed stock
       let updatedProcessedStock = prev.processedStock;
@@ -691,7 +719,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               stockKg: Math.max(0, p.stockKg - quantityKg),
               lastUpdated: today,
             };
-            processedItemToSync = updated;
             return updated;
           }
           return p;
@@ -717,8 +744,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         paidAmount: saleData.paidAmount,
         remainingAmount: remainingAmount,
       };
-      customerTxToSync = customerTransaction;
-
       if (existingCustIndex >= 0) {
         const existing = updatedCustomers[existingCustIndex];
         assignedCustId = existing.id;
@@ -731,7 +756,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           transactions: [customerTransaction, ...existing.transactions],
         };
         updatedCustomers[existingCustIndex] = updatedCust;
-        customerToSync = updatedCust;
       } else {
         assignedCustId = `cust-${Date.now()}`;
         const newCust: Customer = {
@@ -745,7 +769,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           createdAt: today,
         };
         updatedCustomers.unshift(newCust);
-        customerToSync = newCust;
       }
 
       newSale.customerId = assignedCustId;
@@ -758,10 +781,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         cashInHand: prev.cashInHand + saleData.paidAmount,
       };
     });
-
-    if (customerToSync && customerTxToSync) {
-      sbSyncSale(newSale, customerToSync, customerTxToSync, processedItemToSync);
-    }
 
     return { success: true };
   };
@@ -798,9 +817,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
       updatedCustomers[custIndex] = updatedCust;
 
-      // Supabase push
-      sbSyncCustomerPayment(updatedCust, transaction);
-
       return {
         ...prev,
         customers: updatedCustomers,
@@ -833,7 +849,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       cashInHand: prev.cashInHand - expense.amount,
     }));
 
-    sbSyncExpense(newExpense);
   };
 
   // DELETE EXPENSE
@@ -906,6 +921,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         user,
         login,
         logout,
+        isAuthLoading,
+        isDatabaseLoading,
         lowStockThreshold,
         setLowStockThreshold,
         updateRawMaterialThreshold,
