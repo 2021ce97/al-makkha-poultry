@@ -11,4 +11,4 @@ On the first authenticated login, the app also uploads any completely empty remo
 
 Do not put a `service_role` key in `.env` or in the frontend. The public anon key is the correct browser key.
 
-The migration enables Row Level Security and grants complete access to authenticated users of this factory. Before serving more than one factory, replace this shared policy with organisation/user-specific policies.
+The migration enables Row Level Security and grants complete access to authenticated users of this factory. Before serving more than one factory, replace this shared policy with organisation/user-specific policies...
