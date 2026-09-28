@@ -165,9 +165,25 @@ export const LoginPage: React.FC = () => {
                 disabled={isSubmitting}
                 className="w-full mt-2 py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 disabled:cursor-wait text-white font-bold text-sm shadow-md shadow-amber-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
               >
-                <span>{isSubmitting ? 'Signing in…' : t.loginBtn}</span>
+                <span>{isSubmitting ? (lang === 'fa' ? 'در حال ورود...' : lang === 'ps' ? 'ننوتل روان دي...' : 'Signing in…') : t.loginBtn}</span>
                 <ArrowIcon className="w-4 h-4" />
               </button>
+
+              {/* Quick Fill Preset for Director & Owners */}
+              <div className="pt-3 border-t border-slate-100 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('Rayan@poletry.af');
+                    setPassword('Rayan6789');
+                    setError(null);
+                  }}
+                  className="w-full py-2 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Wheat className="w-3.5 h-3.5 text-amber-600" />
+                  <span>{t.fillDemoBtn}</span>
+                </button>
+              </div>
             </form>
           </div>
         </div>

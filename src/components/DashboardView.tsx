@@ -28,6 +28,7 @@ import {
   Cell,
   CartesianGrid
 } from 'recharts';
+import { ThresholdRestockWidget } from './ThresholdRestockWidget';
 
 interface DashboardViewProps {
   setActiveTab: (tab: any) => void;
@@ -400,7 +401,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
         </div>
       </div>
 
-      {/* 3. CHARTS & ANALYTICS ROW */}
+      {/* 3. DEDICATED RESTOCK & THRESHOLD MANAGER WIDGET */}
+      <ThresholdRestockWidget setActiveTab={setActiveTab} />
+
+      {/* 4. CHARTS & ANALYTICS ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sales & Profit Trend (2 Columns) */}
         <div className="lg:col-span-2 p-5 rounded-2xl bg-white border border-slate-200 shadow-sm">

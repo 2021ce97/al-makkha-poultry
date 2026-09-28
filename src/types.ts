@@ -21,6 +21,7 @@ export interface SupplierTransaction {
   amount: number;
   paidAmount: number;
   remainingAmount: number;
+  handledBy?: string; // which owner/account recorded or gave the money
 }
 
 export interface Supplier {
@@ -83,6 +84,7 @@ export interface CustomerTransaction {
   amount: number;
   paidAmount: number;
   remainingAmount: number;
+  handledBy?: string; // which owner/account received the money
 }
 
 export interface Customer {
@@ -152,9 +154,14 @@ export interface DatabaseState {
   cashInHand: number;
 }
 
+export type OwnerRoleId = 'owner_one' | 'owner_two' | 'admin';
+
 export interface AuthUser {
   email: string;
+  username: string;
   name: string;
   role: string;
+  roleId: OwnerRoleId;
+  phone?: string;
   loginTime: string;
 }

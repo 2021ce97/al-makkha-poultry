@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useDatabase } from '../context/DatabaseContext';
 import { 
   Scale, 
@@ -14,38 +14,58 @@ import {
   Info, 
   ArrowRightLeft,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Bookmark,
+  BookmarkPlus,
+  RefreshCw,
+  Search,
+  Sliders,
+  Copy,
+  FolderOpen,
+  Eye,
+  Percent,
+  TrendingUp,
+  Building,
+  Check
 } from 'lucide-react';
+import { Formula } from '../types';
 
 export const FormulaView: React.FC = () => {
   const { 
     db, 
     t, 
     lang, 
+    saveFormulaTemplate,
     createFormulaAndProduce, 
     deleteFormula, 
     getLocalizedName 
   } = useDatabase();
 
+  // Active Loaded Formula ID (if user loaded an existing saved formula)
+  const [loadedFormulaId, setLoadedFormulaId] = useState<string | null>(null);
+
+  // Form State
   const [formulaName, setFormulaName] = useState('');
   const [description, setDescription] = useState('');
   const [operatorName, setOperatorName] = useState('');
   const [batchExpenses, setBatchExpenses] = useState<number | ''>('');
   
-  // Ingredients list in formulation
+  // Ingredients list in formulation (can hold 20+ items seamlessly)
   const [ingredients, setIngredients] = useState<{ rawMaterialId: string; weightKg: number }[]>([
-    { rawMaterialId: db.rawMaterials[0]?.id || '', weightKg: 500 },
-    { rawMaterialId: db.rawMaterials[1]?.id || '', weightKg: 300 },
-    { rawMaterialId: db.rawMaterials[2]?.id || '', weightKg: 150 },
-    { rawMaterialId: db.rawMaterials[3]?.id || '', weightKg: 50 },
+    { rawMaterialId: db.rawMaterials[0]?.id || '', weightKg: 550 },
+    { rawMaterialId: db.rawMaterials[1]?.id || '', weightKg: 350 },
+    { rawMaterialId: db.rawMaterials[2]?.id || '', weightKg: 75 },
+    { rawMaterialId: db.rawMaterials[3]?.id || '', weightKg: 25 },
   ]);
 
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // Ingredient search filter within the builder
+  const [ingredientSearch, setIngredientSearch] = useState('');
 
-  // In-app delete formula confirmation
+  // Messages & confirmations
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [formulaToDelete, setFormulaToDelete] = useState<string | null>(null);
 
-  // Multi-unit display toggles: 'all' | 'ton' | 'bag' | 'kg'
+  // Multi-unit display toggles for processed stock: 'all' | 'ton' | 'bag' | 'kg'
   const [stockViewUnit, setStockViewUnit] = useState<'all' | 'ton' | 'bag' | 'kg'>('all');
 
   // Quick Unit Converter state
@@ -90,9 +110,104 @@ export const FormulaView: React.FC = () => {
     }
   };
 
+  // 1. LOAD A SAVED FORMULA TEMPLATE INTO THE BUILDER
+  const handleLoadFormula = (formula: Formula) => {
+    setLoadedFormulaId(formula.id);
+    setFormulaName(formula.name);
+    setDescription(formula.description || '');
+    
+    // Map ingredients
+    const loadedIngs = formula.ingredients.map(ing => ({
+      rawMaterialId: ing.rawMaterialId,
+      weightKg: ing.weightKg,
+    }));
+    
+    setIngredients(loadedIngs);
+    setMessage({
+      type: 'success',
+      text: `${t.loadFormulaTemplate}: "${formula.name}" (${loadedIngs.length} ${t.itemsCount} • ${(formula.totalWeightKg / 1000).toFixed(2)} ${t.tons})`
+    });
+
+    // Scroll smoothly to builder
+    const builderEl = document.getElementById('formula-recipe-builder');
+    if (builderEl) {
+      builderEl.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  // 2. ONE-CLICK ADD ALL STOCK RAW MATERIALS (SOLVES 20+ ITEMS ISSUE)
+  const handleAddAllStockItems = () => {
+    if (db.rawMaterials.length === 0) return;
+
+    // Get current IDs already in formulation
+    const currentMap = new Map(ingredients.map(i => [i.rawMaterialId, i.weightKg]));
+
+    // Build new list with all raw materials from warehouse
+    const newIngredients = db.rawMaterials.map(rm => ({
+      rawMaterialId: rm.id,
+      weightKg: currentMap.get(rm.id) || (rm.category === 'Grains' ? 500 : rm.category === 'Protein' ? 250 : 25),
+    }));
+
+    setIngredients(newIngredients);
+    setMessage({
+      type: 'success',
+      text: `${t.addAllActiveMaterials} (${newIngredients.length} ${t.itemsCount})`
+    });
+  };
+
+  // 3. SAVE CURRENT FORMULA AS TEMPLATE (WITHOUT PRODUCING)
+  const handleSaveAsTemplate = (isUpdate = false) => {
+    setMessage(null);
+
+    if (!formulaName.trim()) {
+      setMessage({ type: 'error', text: t.pleaseEnterFormulaName });
+      return;
+    }
+
+    if (ingredients.length === 0 || totalBatchWeight <= 0) {
+      setMessage({ type: 'error', text: t.totalWeightMustBePositive });
+      return;
+    }
+
+    const targetId = isUpdate && loadedFormulaId ? loadedFormulaId : undefined;
+    const result = saveFormulaTemplate(
+      formulaName.trim(),
+      ingredients,
+      description.trim() || undefined,
+      targetId
+    );
+
+    if (result.success) {
+      setLoadedFormulaId(result.formulaId);
+      setMessage({
+        type: 'success',
+        text: isUpdate ? t.formulaUpdatedSuccess : t.formulaSavedSuccess
+      });
+    }
+  };
+
+  // Reset Builder to Empty / New
+  const handleResetBuilder = () => {
+    setLoadedFormulaId(null);
+    setFormulaName('');
+    setDescription('');
+    setOperatorName('');
+    setBatchExpenses('');
+    if (db.rawMaterials.length > 0) {
+      setIngredients([
+        { rawMaterialId: db.rawMaterials[0]?.id || '', weightKg: 500 },
+        { rawMaterialId: db.rawMaterials[1]?.id || '', weightKg: 300 },
+        { rawMaterialId: db.rawMaterials[2]?.id || '', weightKg: 150 },
+        { rawMaterialId: db.rawMaterials[3]?.id || '', weightKg: 50 },
+      ]);
+    }
+    setMessage(null);
+  };
+
   // Quick Preset Templates
   const applyTemplate = (type: 'starter' | 'grower' | 'layer') => {
     if (db.rawMaterials.length === 0) return;
+    setLoadedFormulaId(null);
 
     const corn = db.rawMaterials.find(r => r.name.includes('Corn') || r.name.includes('جواری') || r.name.includes('جوار')) || db.rawMaterials[0];
     const soya = db.rawMaterials.find(r => r.name.includes('Soy') || r.name.includes('سویا')) || db.rawMaterials[1] || db.rawMaterials[0];
@@ -185,6 +300,7 @@ export const FormulaView: React.FC = () => {
   const totalProcessedBags = Math.round(totalProcessedKg / 50);
   const totalProcessedValue = db.processedStock.reduce((acc, p) => acc + ((p.stockKg || 0) * (p.averageCostPerKg || 0)), 0);
 
+  // Produce Action
   const handleProduce = (e: React.FormEvent) => {
     e.preventDefault();
     setMessage(null);
@@ -235,6 +351,7 @@ export const FormulaView: React.FC = () => {
       setDescription('');
       setOperatorName('');
       setBatchExpenses('');
+      setLoadedFormulaId(null);
     } else {
       setMessage({ type: 'error', text: result.error || 'Error' });
     }
@@ -243,9 +360,22 @@ export const FormulaView: React.FC = () => {
   const handleConfirmDeleteFormula = () => {
     if (formulaToDelete) {
       deleteFormula(formulaToDelete);
+      if (loadedFormulaId === formulaToDelete) {
+        setLoadedFormulaId(null);
+      }
       setFormulaToDelete(null);
     }
   };
+
+  // Filter ingredients in the builder if user types a search term
+  const filteredIngredientsWithIndices = useMemo(() => {
+    return ingredients.map((ing, originalIndex) => {
+      const raw = db.rawMaterials.find(r => r.id === ing.rawMaterialId);
+      const name = raw ? getLocalizedName(raw.name).toLowerCase() : '';
+      const matches = !ingredientSearch || name.includes(ingredientSearch.toLowerCase());
+      return { ing, originalIndex, raw, matches };
+    });
+  }, [ingredients, db.rawMaterials, ingredientSearch, lang]);
 
   return (
     <div className="space-y-6">
@@ -302,6 +432,96 @@ export const FormulaView: React.FC = () => {
             {t.layerHen}
           </button>
         </div>
+      </div>
+
+      {/* -------------------------------------------------------------------------------- */}
+      {/* 1. SAVED FORMULAS SELECTOR BAR (SOLVES >20 ITEMS RE-ENTRY BY SAVING & LOADING)   */}
+      {/* -------------------------------------------------------------------------------- */}
+      <div className="bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-slate-50 p-4 rounded-2xl border border-amber-200 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-amber-600 text-white rounded-lg shadow-xs">
+              <Bookmark className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">
+                {t.savedFormulasTitle}
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                {t.selectExistingRecipe}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* 1-Click Add All Stock Items Button */}
+            <button
+              type="button"
+              onClick={handleAddAllStockItems}
+              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{t.addAllActiveMaterials}</span>
+            </button>
+
+            {/* Reset / New Recipe Form */}
+            <button
+              type="button"
+              onClick={handleResetBuilder}
+              className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              {t.addNew}
+            </button>
+          </div>
+        </div>
+
+        {/* Formula Badges / Quick Load Chips */}
+        {db.formulas.length === 0 ? (
+          <p className="text-xs text-slate-500 bg-white/70 p-3 rounded-xl border border-amber-100">
+            {t.noSavedFormulasYet}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+            {db.formulas.map(f => {
+              const isSelected = loadedFormulaId === f.id;
+              const fTons = (f.totalWeightKg / 1000).toFixed(2);
+              const fItems = f.ingredients.length;
+
+              return (
+                <div
+                  key={f.id}
+                  onClick={() => handleLoadFormula(f)}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between group ${
+                    isSelected
+                      ? 'bg-amber-600 text-white border-amber-700 shadow-md ring-2 ring-amber-400'
+                      : 'bg-white hover:bg-amber-50/60 border-slate-200 hover:border-amber-300 shadow-2xs'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-1">
+                    <h4 className={`font-bold text-xs line-clamp-1 ${isSelected ? 'text-white' : 'text-slate-900 group-hover:text-amber-800'}`}>
+                      {f.name}
+                    </h4>
+                    {isSelected && (
+                      <span className="p-0.5 rounded-full bg-white/20 text-white shrink-0">
+                        <Check className="w-3 h-3" />
+                      </span>
+                    )}
+                  </div>
+
+                  <div className={`mt-2 pt-2 border-t flex items-center justify-between text-[10px] font-mono ${
+                    isSelected ? 'border-amber-500/50 text-amber-100' : 'border-slate-100 text-slate-500'
+                  }`}>
+                    <span>{fItems} {t.itemsCount}</span>
+                    <span className="font-bold">{fTons} {t.tons}</span>
+                    <span className={`font-bold ${isSelected ? 'text-amber-200' : 'text-emerald-700'}`}>
+                      {f.costPerKg.toFixed(1)} {t.currency}/kg
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Interactive Quick Unit Converter Box (Tons <-> Bags <-> Kg) */}
@@ -388,30 +608,48 @@ export const FormulaView: React.FC = () => {
       {/* Alert Messages */}
       {message && (
         <div
-          className={`p-4 rounded-xl flex items-center gap-3 border ${
+          className={`p-4 rounded-xl flex items-center justify-between gap-3 border ${
             message.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
               : 'bg-rose-50 border-rose-200 text-rose-800'
           }`}
         >
-          {message.type === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-          )}
-          <span className="text-xs sm:text-sm font-medium">{message.text}</span>
+          <div className="flex items-center gap-2">
+            {message.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            )}
+            <span className="text-xs sm:text-sm font-medium">{message.text}</span>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setMessage(null)}
+            className="text-slate-400 hover:text-slate-700 cursor-pointer p-1"
+          >
+            ✕
+          </button>
         </div>
       )}
 
-      {/* Main Grid: Recipe Builder (2 Cols) + Live Cost Calculator (1 Col) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* -------------------------------------------------------------------------------- */}
+      {/* 2. MAIN GRID: RECIPE BUILDER (2 COLS) + LIVE COST CALCULATOR (1 COL)             */}
+      {/* -------------------------------------------------------------------------------- */}
+      <div id="formula-recipe-builder" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Formula Recipe Builder Form (2 Columns) */}
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Scale className="w-5 h-5 text-amber-600" />
-              <span>{t.recipeBuilderTitle}</span>
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Scale className="w-5 h-5 text-amber-600" />
+                <span>{t.recipeBuilderTitle}</span>
+              </h3>
+              {loadedFormulaId && (
+                <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
+                  {t.edit}
+                </span>
+              )}
+            </div>
 
             {/* Scale Batch to Exact Tons Shortcuts */}
             <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl text-xs">
@@ -452,7 +690,7 @@ export const FormulaView: React.FC = () => {
                   value={formulaName}
                   onChange={(e) => setFormulaName(e.target.value)}
                   placeholder={t.formulaNamePlaceholder}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs font-medium"
                 />
               </div>
 
@@ -502,74 +740,120 @@ export const FormulaView: React.FC = () => {
               </div>
             </div>
 
-            {/* Ingredients Table / Rows */}
+            {/* Ingredients Table / Rows with Search & 20+ Items Optimization */}
             <div className="mt-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  {t.rawItemsInBatch}
-                </label>
-                <button
-                  type="button"
-                  onClick={handleAddIngredientRow}
-                  className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>{t.addRawIngredient}</span>
-                </button>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    {t.rawItemsInBatch} ({ingredients.length} {t.itemsCount})
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Search input within ingredients */}
+                  {ingredients.length > 5 && (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder={t.search}
+                        value={ingredientSearch}
+                        onChange={(e) => setIngredientSearch(e.target.value)}
+                        className="ps-7 pe-2 py-1 text-xs bg-slate-100 border border-slate-300 rounded-lg w-32 focus:w-44 transition-all focus:outline-none focus:border-amber-600"
+                      />
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute start-2 top-2 pointer-events-none" />
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleAddIngredientRow}
+                    className="px-3 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{t.addRawIngredient}</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-2.5">
-                {ingredients.map((ing, idx) => {
-                  const selectedRaw = db.rawMaterials.find(r => r.id === ing.rawMaterialId);
-                  const cost = selectedRaw ? selectedRaw.unitPrice * (Number(ing.weightKg) || 0) : 0;
-                  const isInsufficient = selectedRaw && selectedRaw.stockKg < (Number(ing.weightKg) || 0);
+              {/* Scrollable list of ingredients */}
+              <div className="space-y-2 max-h-[520px] overflow-y-auto pe-1">
+                {filteredIngredientsWithIndices.map(({ ing, originalIndex, raw, matches }) => {
+                  if (!matches) return null;
+
+                  const weight = Number(ing.weightKg) || 0;
+                  const cost = raw ? raw.unitPrice * weight : 0;
+                  const isInsufficient = raw && raw.stockKg < weight;
+                  const percentage = totalBatchWeight > 0 ? ((weight / totalBatchWeight) * 100).toFixed(1) : '0.0';
 
                   return (
                     <div 
-                      key={idx}
-                      className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                        isInsufficient ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-200'
+                      key={originalIndex}
+                      className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-colors ${
+                        isInsufficient ? 'bg-rose-50/70 border-rose-300' : 'bg-slate-50/80 border-slate-200 hover:border-slate-300'
                       }`}
                     >
+                      {/* Index & Material Selector */}
                       <div className="flex-1 min-w-0">
-                        <label className="block text-[10px] text-slate-500 mb-1">{t.selectRawIndex} #{idx + 1}</label>
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+                          <span className="font-mono font-bold text-slate-700">#{originalIndex + 1}</span>
+                          {raw && (
+                            <span className={`font-mono ${isInsufficient ? 'text-rose-700 font-bold' : 'text-slate-500'}`}>
+                              {t.currentStockLabel}: {(raw.stockKg / 1000).toFixed(2)} {t.tons} ({raw.stockKg.toLocaleString()} kg)
+                            </span>
+                          )}
+                        </div>
                         <select
                           value={ing.rawMaterialId}
-                          onChange={(e) => handleUpdateIngredient(idx, 'rawMaterialId', e.target.value)}
+                          onChange={(e) => handleUpdateIngredient(originalIndex, 'rawMaterialId', e.target.value)}
                           className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs font-medium"
                         >
                           {db.rawMaterials.map(rm => (
                             <option key={rm.id} value={rm.id}>
-                              {getLocalizedName(rm.name)} ({t.currentStockLabel}: {(rm.stockKg / 1000).toFixed(2)} {t.tons} / {rm.stockKg.toLocaleString()} {t.kilo} • {rm.unitPrice} {t.currency}/kg)
+                              {getLocalizedName(rm.name)} • {rm.unitPrice} {t.currency}/kg ({t.currentStockLabel}: {rm.stockKg.toLocaleString()} kg)
                             </option>
                           ))}
                         </select>
                       </div>
 
-                      <div className="w-full sm:w-36">
+                      {/* Weight Input */}
+                      <div className="w-full sm:w-32">
                         <label className="block text-[10px] text-slate-500 mb-1">{t.weightKgLabel}</label>
-                        <input
-                          type="number"
-                          min="1"
-                          step="any"
-                          value={ing.weightKg}
-                          onChange={(e) => handleUpdateIngredient(idx, 'weightKg', e.target.value ? Number(e.target.value) : 0)}
-                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-mono focus:outline-none focus:border-amber-600 shadow-2xs"
-                        />
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={ing.weightKg}
+                            onChange={(e) => handleUpdateIngredient(originalIndex, 'weightKg', e.target.value ? Number(e.target.value) : 0)}
+                            className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold focus:outline-none focus:border-amber-600 shadow-2xs"
+                          />
+                          <span className="absolute end-2 top-1.5 text-[10px] font-bold text-slate-400">kg</span>
+                        </div>
                       </div>
 
-                      <div className="w-full sm:w-32 text-end sm:pt-4">
-                        <span className="text-[10px] text-slate-500 block">{t.itemCostTotal}</span>
-                        <span className="text-xs font-bold text-amber-700 font-mono">
+                      {/* Batch Percentage Badge */}
+                      <div className="w-full sm:w-16 text-center sm:pt-4">
+                        <span className="text-[10px] text-slate-400 block sm:hidden">{t.percentageOfBatch}</span>
+                        <span className="inline-block px-2 py-1 rounded bg-amber-100/70 border border-amber-200 text-amber-900 font-mono font-bold text-[11px]">
+                          {percentage}%
+                        </span>
+                      </div>
+
+                      {/* Line Cost Total */}
+                      <div className="w-full sm:w-28 text-end sm:pt-4">
+                        <span className="text-[10px] text-slate-400 block sm:hidden">{t.itemCostTotal}</span>
+                        <span className="text-xs font-bold text-amber-800 font-mono block">
                           {cost.toLocaleString()} {t.currency}
                         </span>
                       </div>
 
-                      <div className="sm:pt-4">
+                      {/* Remove Row Button */}
+                      <div className="sm:pt-4 text-end">
                         <button
                           type="button"
-                          onClick={() => handleRemoveIngredientRow(idx)}
+                          onClick={() => handleRemoveIngredientRow(originalIndex)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          title={t.delete}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -580,13 +864,48 @@ export const FormulaView: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
+            {/* Bottom Actions: Produce Button + Template Save Options */}
+            <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Save as Template / Update Template Button */}
+                {loadedFormulaId ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveAsTemplate(true)}
+                      className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Bookmark className="w-4 h-4 text-amber-400" />
+                      <span>{t.updateTemplateBtn}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveAsTemplate(false)}
+                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <BookmarkPlus className="w-4 h-4 text-slate-500" />
+                      <span>{t.saveNewTemplateBtn}</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleSaveAsTemplate(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <BookmarkPlus className="w-4 h-4 text-amber-400" />
+                    <span>{t.saveAsTemplateBtn}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Main Produce Feed Button */}
               <button
                 type="submit"
                 className="px-6 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-md shadow-amber-600/25 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
               >
-                <PackageCheck className="w-4 h-4" />
-                <span>{t.produceFeedBtn}</span>
+                <PackageCheck className="w-5 h-5" />
+                <span>{t.produceFeedBtn} ({totalTons.toFixed(2)} {t.tons})</span>
               </button>
             </div>
           </form>
@@ -616,18 +935,22 @@ export const FormulaView: React.FC = () => {
                   <span className="bg-amber-100 px-2 py-0.5 rounded text-amber-800 font-bold">
                     {totalBags.toLocaleString()} {t.bags}
                   </span>
+                  <span>•</span>
+                  <span className="text-slate-500">
+                    {ingredients.length} {t.itemsCount}
+                  </span>
                 </div>
               </div>
 
               {/* Raw Material Cost & Batch Expenses */}
               <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
                 <div className="flex justify-between items-center text-slate-600">
-                  <span>{t.rawMaterialsCost}</span>
+                  <span>{t.rawMaterialsCost} ({ingredients.length} {t.itemsCount}):</span>
                   <span className="font-mono font-bold">{totalRawMaterialCost.toLocaleString()} {t.currency}</span>
                 </div>
                 {batchExpenseAmount > 0 && (
                   <div className="flex justify-between items-center text-amber-700 mt-1.5 pt-1.5 border-t border-slate-200">
-                    <span>{t.prodExpensesSub}</span>
+                    <span>{t.prodExpensesSub}:</span>
                     <span className="font-mono font-bold">+{batchExpenseAmount.toLocaleString()} {t.currency}</span>
                   </div>
                 )}
@@ -676,20 +999,22 @@ export const FormulaView: React.FC = () => {
         </div>
       </div>
 
-      {/* Processed Feed Stock Section with Multi-Unit View (Tons, Bags, Kg) */}
+      {/* -------------------------------------------------------------------------------- */}
+      {/* 3. FORMULATED ITEM STOCK (PROCESSED FEED WAREHOUSE) - SIMPLE & FORMATTED TABLE    */}
+      {/* -------------------------------------------------------------------------------- */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
         {/* Section Header & Unit Selector */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl">
               <PackageCheck className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                {t.processedStockTitleTons}
+                {t.formulatedStockSimpleTitle}
               </h3>
               <p className="text-xs text-slate-500">
-                {t.processedStockSubtitle}
+                {t.formulatedStockSimpleDesc}
               </p>
             </div>
           </div>
@@ -778,119 +1103,100 @@ export const FormulaView: React.FC = () => {
           </div>
         </div>
 
-        {/* Processed Stock Items List */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-          {db.processedStock.map(p => {
-            const bags = Math.round(p.stockKg / 50);
-            const tons = p.stockKg / 1000;
-            const ratePerTon = p.averageCostPerKg * 1000;
-            const ratePerBag = p.averageCostPerKg * 50;
+        {/* Formatted Processed Feed Stock Table (Simple and Clean Layout) */}
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full text-start border-collapse min-w-[700px]">
+            <thead>
+              <tr className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-bold text-slate-700">
+                <th className="py-3 px-4 text-start">{t.productName}</th>
+                <th className="py-3 px-4 text-start">{t.currentStockLabel}</th>
+                <th className="py-3 px-3 text-start">{t.costPerTon}</th>
+                <th className="py-3 px-3 text-start">{t.costPerBag50kg}</th>
+                <th className="py-3 px-3 text-start">{t.costPerKgShort}</th>
+                <th className="py-3 px-4 text-start">{t.totalValue}</th>
+                <th className="py-3 px-3 text-center">{t.action}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {db.processedStock.map(p => {
+                const bags = Math.round(p.stockKg / 50);
+                const tons = p.stockKg / 1000;
+                const ratePerTon = p.averageCostPerKg * 1000;
+                const ratePerBag = p.averageCostPerKg * 50;
+                const val = p.stockKg * p.averageCostPerKg;
 
-            return (
-              <div
-                key={p.id}
-                className="p-4 rounded-xl border border-slate-200 bg-white hover:border-amber-300 transition-all shadow-2xs flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <h4 className="font-bold text-slate-900 text-sm">
-                      {getLocalizedName(p.name)}
-                    </h4>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                      {tons.toFixed(2)} {t.tons}
-                    </span>
-                  </div>
+                // Find corresponding saved formula if any
+                const correspondingFormula = db.formulas.find(f => f.id === p.formulaId || f.name.toLowerCase() === p.name.toLowerCase());
 
-                  {/* Stock Quantity Display according to selected view unit */}
-                  <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5">
-                    {stockViewUnit === 'ton' && (
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">{t.processedStockInTons}:</span>
-                        <div className="text-2xl font-black font-mono text-amber-800">
-                          {tons.toFixed(2)} <span className="text-xs font-semibold">{t.tons}</span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          {t.equivalentTonRate} {bags.toLocaleString()} {t.bags} • {p.stockKg.toLocaleString()} {t.kilo}
-                        </div>
+                return (
+                  <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-slate-900 text-sm">
+                        {getLocalizedName(p.name)}
                       </div>
-                    )}
-
-                    {stockViewUnit === 'bag' && (
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">{t.inBags}:</span>
-                        <div className="text-2xl font-black font-mono text-slate-900">
-                          {bags.toLocaleString()} <span className="text-xs font-semibold">{t.bags}</span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          {t.equivalentTonRate} {tons.toFixed(2)} {t.tons} • {p.stockKg.toLocaleString()} {t.kilo}
-                        </div>
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        {t.date}: {p.lastUpdated}
                       </div>
-                    )}
+                    </td>
 
-                    {stockViewUnit === 'kg' && (
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">{t.inKg}:</span>
-                        <div className="text-2xl font-black font-mono text-slate-900">
-                          {p.stockKg.toLocaleString()} <span className="text-xs font-semibold">{t.kilos}</span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          {t.equivalentTonRate} {tons.toFixed(2)} {t.tons} • {bags.toLocaleString()} {t.bags}
-                        </div>
+                    {/* Formatted Multi-Unit Stock */}
+                    <td className="py-3 px-4">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-base font-bold font-mono text-amber-800">
+                          {tons.toFixed(2)}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-600">{t.tons}</span>
                       </div>
-                    )}
-
-                    {stockViewUnit === 'all' && (
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
-                          <span className="text-[10px] text-amber-800 block font-semibold">{t.inTons}</span>
-                          <span className="font-bold font-mono text-amber-900 text-sm">{tons.toFixed(2)}</span>
-                        </div>
-                        <div className="p-2 rounded-lg bg-white border border-slate-200">
-                          <span className="text-[10px] text-slate-500 block font-semibold">{t.inBags}</span>
-                          <span className="font-bold font-mono text-slate-900 text-sm">{bags.toLocaleString()}</span>
-                        </div>
-                        <div className="p-2 rounded-lg bg-white border border-slate-200">
-                          <span className="text-[10px] text-slate-500 block font-semibold">{t.inKg}</span>
-                          <span className="font-bold font-mono text-slate-900 text-sm">{p.stockKg.toLocaleString()}</span>
-                        </div>
+                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                        {bags.toLocaleString()} {t.bags} • {p.stockKg.toLocaleString()} {t.kilo}
                       </div>
-                    )}
-                  </div>
+                    </td>
 
-                  {/* Production Cost Rates Breakdown */}
-                  <div className="mt-3 pt-2 border-t border-slate-100 text-xs space-y-1">
-                    <div className="flex justify-between items-center text-slate-600">
-                      <span className="font-medium">{t.costPerTon}:</span>
-                      <span className="font-mono font-bold text-amber-800">
-                        {ratePerTon.toLocaleString(undefined, { maximumFractionDigits: 1 })} {t.currency}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-slate-600">
-                      <span className="font-medium">{t.costPerBag50kg}</span>
-                      <span className="font-mono font-bold text-slate-800">
-                        {ratePerBag.toFixed(0)} {t.currency}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-slate-600">
-                      <span className="font-medium">{t.costPerKgShort}</span>
-                      <span className="font-mono font-bold text-slate-800">
-                        {p.averageCostPerKg.toFixed(2)} {t.currency}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                    {/* Cost per Ton */}
+                    <td className="py-3 px-3 font-mono font-bold text-amber-900 text-xs">
+                      {ratePerTon.toLocaleString(undefined, { maximumFractionDigits: 0 })} {t.currency}
+                    </td>
 
-                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                  <span>{t.date}: {p.lastUpdated}</span>
-                  <span className="font-mono">ID: {p.id.slice(-6)}</span>
-                </div>
-              </div>
-            );
-          })}
+                    {/* Cost per Bag */}
+                    <td className="py-3 px-3 font-mono font-semibold text-slate-800 text-xs">
+                      {ratePerBag.toFixed(0)} {t.currency}
+                    </td>
+
+                    {/* Cost per Kg */}
+                    <td className="py-3 px-3 font-mono font-semibold text-slate-800 text-xs">
+                      {p.averageCostPerKg.toFixed(2)} {t.currency}
+                    </td>
+
+                    {/* Total Stock Asset Value */}
+                    <td className="py-3 px-4 font-mono font-bold text-emerald-800 text-sm">
+                      {val.toLocaleString()} {t.currency}
+                    </td>
+
+                    {/* Quick Load into Builder Action */}
+                    <td className="py-3 px-3 text-center">
+                      {correspondingFormula && (
+                        <button
+                          type="button"
+                          onClick={() => handleLoadFormula(correspondingFormula)}
+                          className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                          title={t.loadFormulaToBuilder}
+                        >
+                          <RefreshCw className="w-3 h-3 text-amber-700" />
+                          <span>{t.produceMoreBtn}</span>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* Saved Formulated Items Section with Delete Option & Tons */}
+      {/* -------------------------------------------------------------------------------- */}
+      {/* 4. SAVED FORMULAS CARDS DETAILS & RECIPE MANAGEMENT                              */}
+      {/* -------------------------------------------------------------------------------- */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-4">
           <Layers className="w-4 h-4 text-amber-600" />
@@ -915,18 +1221,43 @@ export const FormulaView: React.FC = () => {
                   <div>
                     <div className="flex items-start justify-between gap-2">
                       <h4 className="font-bold text-slate-900 text-sm">{f.name}</h4>
-                      <button
-                        type="button"
-                        onClick={() => setFormulaToDelete(f.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                        title={t.deleteFormula}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleLoadFormula(f)}
+                          className="p-1.5 text-amber-700 hover:bg-amber-100 rounded-lg transition-colors cursor-pointer"
+                          title={t.loadFormulaTemplate}
+                        >
+                          <FolderOpen className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormulaToDelete(f.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title={t.deleteFormula}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                     {f.description && (
                       <p className="text-xs text-slate-600 mt-1">{f.description}</p>
                     )}
+
+                    {/* Ingredients summary pills */}
+                    <div className="mt-2.5 flex flex-wrap gap-1">
+                      {f.ingredients.slice(0, 4).map((ing, i) => (
+                        <span key={i} className="text-[10px] bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md font-medium">
+                          {getLocalizedName(ing.rawMaterialName).split('(')[0].trim()}: {ing.weightKg}kg
+                        </span>
+                      ))}
+                      {f.ingredients.length > 4 && (
+                        <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-md font-bold">
+                          +{f.ingredients.length - 4} {t.itemsCount}
+                        </span>
+                      )}
+                    </div>
+
                     <div className="mt-3 pt-2 border-t border-slate-200/60 space-y-1.5 text-xs">
                       <div className="flex justify-between text-slate-600">
                         <span>{t.totalFormulaWeight}:</span>
@@ -941,22 +1272,24 @@ export const FormulaView: React.FC = () => {
                         </span>
                       </div>
                       <div className="flex justify-between text-slate-600">
-                        <span>{t.costPerBag50kg} / {t.costPerKgShort}</span>
+                        <span>{t.costPerBag50kg} / {t.costPerKgShort}:</span>
                         <span className="font-mono font-semibold text-slate-700">
                           {costBag.toFixed(0)} / {f.costPerKg.toFixed(2)} {t.currency}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-slate-600">
-                        <span>{t.totalBatchCost}:</span>
-                        <span className="font-mono font-bold text-slate-800">
-                          {f.totalBatchCost.toLocaleString()} {t.currency}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-3 pt-2 border-t border-slate-200 text-[11px] text-slate-400">
-                    {t.date}: {f.createdDate}
+                  <div className="mt-3 pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-400">
+                    <span>{t.date}: {f.createdDate}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleLoadFormula(f)}
+                      className="text-amber-700 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>{t.loadFormulaTemplate}</span>
+                      <span>→</span>
+                    </button>
                   </div>
                 </div>
               );
@@ -965,7 +1298,9 @@ export const FormulaView: React.FC = () => {
         )}
       </div>
 
-      {/* Recent Production Batches with Tons */}
+      {/* -------------------------------------------------------------------------------- */}
+      {/* 5. RECENT PRODUCTION BATCHES HISTORY                                             */}
+      {/* -------------------------------------------------------------------------------- */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-3">
           <CalendarClock className="w-4 h-4 text-amber-600" />
@@ -987,6 +1322,9 @@ export const FormulaView: React.FC = () => {
                   <span className="text-[11px] text-slate-500">
                     {t.date}: {b.date} {b.operatorName ? `• ${t.operatorNameLabel}: ${b.operatorName}` : ''}
                   </span>
+                  {b.notes && (
+                    <p className="text-[10px] text-slate-500 mt-0.5">{b.notes}</p>
+                  )}
                 </div>
                 <div className="text-end">
                   <span className="font-bold font-mono text-slate-900 text-sm block">

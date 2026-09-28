@@ -4,6 +4,7 @@ import {
   Language, 
   RawMaterialItem, 
   Supplier, 
+  SupplierTransaction,
   Customer, 
   Sale, 
   Expense, 
@@ -11,7 +12,8 @@ import {
   Formula, 
   ProductionBatch, 
   UnitType,
-  AuthUser
+  AuthUser,
+  OwnerRoleId
 } from '../types';
 import { initialFactoryData } from '../initialData';
 import { 
@@ -21,6 +23,7 @@ import {
   getLocalizedTransactionType,
   getLocalizedTransactionDescription 
 } from '../translations';
+import { authenticateOwner } from '../authAccounts';
 import { supabase } from '../lib/supabase';
 import { 
   loadStateFromSupabase, 
@@ -35,6 +38,7 @@ import {
 const STORAGE_KEY = 'mahir_poultry_feed_db_v1';
 const LANG_STORAGE_KEY = 'mahir_poultry_feed_lang';
 const THRESHOLD_STORAGE_KEY = 'mahir_poultry_feed_threshold';
+const AUTH_USER_STORAGE_KEY = 'al_makkah_auth_user';
 
 interface DatabaseContextType {
   db: DatabaseState;
@@ -64,10 +68,26 @@ interface DatabaseContextType {
     paidAmount: number, 
     supplierPhone?: string
   ) => void;
+  restockRawMaterial: (params: {
+    materialId: string;
+    addedWeightKg: number;
+    newUnitPrice: number;
+    supplierName?: string;
+    supplierPhone?: string;
+    paidAmount: number;
+    notes?: string;
+    updateAvgCost?: boolean;
+  }) => { success: boolean; error?: string };
   deleteRawMaterial: (id: string) => void;
   settleSupplierPayment: (supplierId: string, amountToPay: number, note?: string) => void;
   deleteSupplier: (supplierId: string) => void;
   // Formulation & Production
+  saveFormulaTemplate: (
+    name: string,
+    ingredients: { rawMaterialId: string; weightKg: number }[],
+    description?: string,
+    formulaIdToUpdate?: string
+  ) => { success: boolean; formulaId: string };
   createFormulaAndProduce: (
     name: string,
     ingredients: { rawMaterialId: string; weightKg: number }[],
@@ -154,9 +174,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return (saved === 'fa' || saved === 'ps' || saved === 'en') ? (saved as Language) : 'fa';
   });
 
-  // Authentication is managed by Supabase Auth. A local-only login cannot
-  // validate users created in the Supabase dashboard.
-  const [user, setUser] = useState<AuthUser | null>(null);
+  // Authentication is managed by Supabase Auth with automatic fallback to local owner/manager credentials.
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    try {
+      const savedUser = localStorage.getItem(AUTH_USER_STORAGE_KEY);
+      if (savedUser) {
+        return JSON.parse(savedUser);
+      }
+    } catch (e) {
+      console.error('Failed to load auth user from localStorage:', e);
+    }
+    return null;
+  });
   const [isAuthLoading, setIsAuthLoading] = useState(Boolean(supabase));
   const [isDatabaseLoading, setIsDatabaseLoading] = useState(Boolean(supabase));
 
@@ -208,11 +237,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const userMetadata = authUser.user_metadata || {};
     const appMetadata = authUser.app_metadata || {};
     const email = authUser.email || '';
+    const rawRole = String(userMetadata.role || appMetadata.role || 'admin');
+    const roleId: OwnerRoleId = rawRole === 'owner_one' ? 'owner_one' : rawRole === 'owner_two' ? 'owner_two' : 'admin';
+    const username = email.split('@')[0] || 'user';
+
     return {
       email,
+      username,
       name: String(userMetadata.full_name || userMetadata.name || email),
-      // Dashboard-created users can store this in either metadata location.
-      role: String(userMetadata.role || appMetadata.role || 'User'),
+      role: String(userMetadata.role_title || userMetadata.role || appMetadata.role || 'مدیریت کارخانه'),
+      roleId,
+      phone: userMetadata.phone ? String(userMetadata.phone) : undefined,
       loginTime: new Date().toISOString(),
     };
   };
@@ -229,13 +264,29 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     supabase.auth.getSession().then(({ data, error }) => {
       if (!isMounted) return;
       if (error) console.error('Supabase session check failed:', error.message);
-      setUser(data.session?.user ? toAuthUser(data.session.user) : null);
+      if (data.session?.user) {
+        const authUser = toAuthUser(data.session.user);
+        setUser(authUser);
+        try {
+          localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(authUser));
+        } catch (e) {
+          console.error(e);
+        }
+      }
       setIsAuthLoading(false);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!isMounted) return;
-      setUser(session?.user ? toAuthUser(session.user) : null);
+      if (session?.user) {
+        const authUser = toAuthUser(session.user);
+        setUser(authUser);
+        try {
+          localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(authUser));
+        } catch (e) {
+          console.error(e);
+        }
+      }
       setIsAuthLoading(false);
     });
 
@@ -360,23 +411,65 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const t = translations[lang];
 
   const login = async (emailInput: string, passwordInput: string) => {
-    if (!supabase) {
-      return { success: false, error: 'Supabase is not configured. Add the VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY variables.' };
+    const cleanEmail = emailInput.trim();
+    const cleanPass = passwordInput;
+
+    // 1. If Supabase is configured, try Supabase Auth first
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: cleanPass,
+        });
+
+        if (!error && data?.user) {
+          const authUser = toAuthUser(data.user);
+          setUser(authUser);
+          try {
+            localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(authUser));
+          } catch (e) {
+            console.error(e);
+          }
+          return { success: true };
+        }
+      } catch (err) {
+        console.warn('Supabase sign-in error, trying local verified credentials:', err);
+      }
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: emailInput.trim(),
-      password: passwordInput,
-    });
-    return error ? { success: false, error: error.message } : { success: true };
+    // 2. Local fallback for verified owner and manager accounts (e.g. Rayan@poletry.af / Rayan6789)
+    const localUser = authenticateOwner(cleanEmail, cleanPass);
+    if (localUser) {
+      setUser(localUser);
+      try {
+        localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(localUser));
+      } catch (e) {
+        console.error(e);
+      }
+      return { success: true };
+    }
+
+    return { 
+      success: false, 
+      error: t.invalidCredentials || 'نام کاربری یا رمز عبور نادرست است!' 
+    };
   };
 
   const logout = async () => {
     setUser(null);
+    try {
+      localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+    } catch (e) {
+      console.error(e);
+    }
     isRemoteStateReady.current = false;
     if (supabase) {
-      const { error } = await supabase.auth.signOut();
-      if (error) console.error('Supabase logout failed:', error.message);
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) console.error('Supabase logout failed:', error.message);
+      } catch (e) {
+        console.error(e);
+      }
     }
   };
 
@@ -466,7 +559,108 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         cashInHand: prev.cashInHand - paidAmount,
       };
     });
+  };
 
+  // RESTOCK EXISTING RAW MATERIAL (WITH SUPPLIER, WEIGHT, PRICE & PAYMENT INFO)
+  const restockRawMaterial = (params: {
+    materialId: string;
+    addedWeightKg: number;
+    newUnitPrice: number;
+    supplierName?: string;
+    supplierPhone?: string;
+    paidAmount: number;
+    notes?: string;
+    updateAvgCost?: boolean;
+  }) => {
+    if (params.addedWeightKg <= 0) {
+      return { success: false, error: 'وزن بار جدید باید بزرگتر از صفر باشد' };
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const totalBill = params.addedWeightKg * params.newUnitPrice;
+    const remaining = Math.max(0, totalBill - params.paidAmount);
+
+    setDb(prev => {
+      const targetIndex = prev.rawMaterials.findIndex(rm => rm.id === params.materialId);
+      if (targetIndex === -1) return prev;
+
+      const existingItem = prev.rawMaterials[targetIndex];
+      const newStockKg = existingItem.stockKg + params.addedWeightKg;
+
+      let finalUnitPrice = params.newUnitPrice;
+      if (params.updateAvgCost && newStockKg > 0) {
+        finalUnitPrice = Math.round(
+          (((existingItem.stockKg * existingItem.unitPrice) + totalBill) / newStockKg) * 100
+        ) / 100;
+      }
+
+      let updatedSuppliers = [...prev.suppliers];
+      let assignedSupplierId = existingItem.supplierId;
+      const activeSupplierName = (params.supplierName && params.supplierName.trim()) || existingItem.supplierName || 'تامین‌کننده مواد خام';
+
+      if (activeSupplierName) {
+        const existingSupIndex = updatedSuppliers.findIndex(
+          s => s.name.toLowerCase() === activeSupplierName.toLowerCase() || (assignedSupplierId && s.id === assignedSupplierId)
+        );
+
+        const transaction: SupplierTransaction = {
+          id: `st-${Date.now()}`,
+          date: today,
+          type: 'purchase',
+          description: `اکمال و تحویل بار: ${existingItem.name} (${params.addedWeightKg.toLocaleString()} کیلو)`,
+          amount: totalBill,
+          paidAmount: params.paidAmount,
+          remainingAmount: remaining,
+        };
+
+        if (existingSupIndex >= 0) {
+          const sup = updatedSuppliers[existingSupIndex];
+          assignedSupplierId = sup.id;
+          updatedSuppliers[existingSupIndex] = {
+            ...sup,
+            phone: params.supplierPhone || sup.phone,
+            totalPurchasedAmount: sup.totalPurchasedAmount + totalBill,
+            totalPaid: sup.totalPaid + params.paidAmount,
+            balanceOwed: sup.balanceOwed + remaining,
+            transactions: [transaction, ...sup.transactions],
+          };
+        } else {
+          assignedSupplierId = `sup-${Date.now()}`;
+          const newSup: Supplier = {
+            id: assignedSupplierId,
+            name: activeSupplierName,
+            phone: params.supplierPhone || '',
+            totalPurchasedAmount: totalBill,
+            totalPaid: params.paidAmount,
+            balanceOwed: remaining,
+            transactions: [transaction],
+            createdAt: today,
+          };
+          updatedSuppliers.unshift(newSup);
+        }
+      }
+
+      const updatedMaterial: RawMaterialItem = {
+        ...existingItem,
+        stockKg: newStockKg,
+        unitPrice: finalUnitPrice,
+        supplierId: assignedSupplierId,
+        supplierName: activeSupplierName,
+        notes: params.notes ? `${existingItem.notes ? existingItem.notes + ' | ' : ''}${params.notes}` : existingItem.notes,
+      };
+
+      const updatedRawMaterials = [...prev.rawMaterials];
+      updatedRawMaterials[targetIndex] = updatedMaterial;
+
+      return {
+        ...prev,
+        rawMaterials: updatedRawMaterials,
+        suppliers: updatedSuppliers,
+        cashInHand: prev.cashInHand - params.paidAmount,
+      };
+    });
+
+    return { success: true };
   };
 
   // UPDATE RAW MATERIAL THRESHOLD PER ITEM
@@ -689,6 +883,63 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
 
     return { success: true };
+  };
+
+  // SAVE OR UPDATE FORMULA RECIPE TEMPLATE (WITHOUT PRODUCING / DEDUCTING STOCK IMMEDIATELY)
+  const saveFormulaTemplate = (
+    name: string,
+    ingredients: { rawMaterialId: string; weightKg: number }[],
+    description?: string,
+    formulaIdToUpdate?: string
+  ) => {
+    const today = new Date().toISOString().split('T')[0];
+    let totalWeight = 0;
+    let totalBatchCost = 0;
+
+    const populatedIngredients = ingredients.map(ing => {
+      const raw = db.rawMaterials.find(r => r.id === ing.rawMaterialId);
+      const price = raw ? raw.unitPrice : 0;
+      const subtotal = (Number(ing.weightKg) || 0) * price;
+      totalWeight += Number(ing.weightKg) || 0;
+      totalBatchCost += subtotal;
+      return {
+        rawMaterialId: ing.rawMaterialId,
+        rawMaterialName: raw ? raw.name : 'Unknown Raw Material',
+        weightKg: Number(ing.weightKg) || 0,
+        costPerKg: price,
+        totalCost: subtotal,
+      };
+    });
+
+    const costPerKg = totalWeight > 0 ? Math.round((totalBatchCost / totalWeight) * 100) / 100 : 0;
+    const targetId = formulaIdToUpdate || `form-${Date.now()}`;
+
+    const newFormula: Formula = {
+      id: targetId,
+      name: name.trim(),
+      description: description?.trim() || undefined,
+      ingredients: populatedIngredients,
+      totalWeightKg: totalWeight,
+      totalBatchCost,
+      costPerKg,
+      createdDate: today,
+    };
+
+    setDb(prev => {
+      const existsIndex = prev.formulas.findIndex(f => f.id === targetId);
+      let updatedFormulas = [...prev.formulas];
+      if (existsIndex >= 0) {
+        updatedFormulas[existsIndex] = newFormula;
+      } else {
+        updatedFormulas = [newFormula, ...prev.formulas];
+      }
+      return {
+        ...prev,
+        formulas: updatedFormulas,
+      };
+    });
+
+    return { success: true, formulaId: targetId };
   };
 
   // DELETE FORMULA
@@ -982,9 +1233,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         getLocalizedTxDesc,
         isSupabaseConnected,
         addRawMaterial,
+        restockRawMaterial,
         deleteRawMaterial,
         settleSupplierPayment,
         deleteSupplier,
+        saveFormulaTemplate,
         createFormulaAndProduce,
         deleteFormula,
         recordSale,
